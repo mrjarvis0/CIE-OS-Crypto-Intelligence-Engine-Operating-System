@@ -1,0 +1,422 @@
+# Core Module
+
+> **A01 Blockchain Intelligence Agent**
+>
+> The **Core Module** is the execution engine of the A01 agent.
+> It coordinates the complete lifecycle of the autonomous blockchain agent,
+> including task execution, reasoning, tool orchestration, event handling,
+> runtime management, guardrails, and lifecycle control.
+
+---
+
+# Purpose
+
+The Core package provides the foundation for every higher-level module inside
+the A01 agent.
+
+It is responsible for:
+
+- Agent lifecycle management
+- Runtime initialization
+- Task orchestration
+- Tool execution
+- Context propagation
+- Event processing
+- Permission enforcement
+- Runtime safety
+- Retry logic
+- Scheduling
+- Agent coordination
+
+Every module such as Memory, Contracts, State Manager, AI Reasoning,
+and Blockchain Services interacts with the Core package.
+
+---
+
+# High-Level Architecture
+
+```
+                User Request
+                      │
+                      ▼
+              Agent Runtime
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+   Lifecycle      Context      Event Bus
+        │             │             │
+        └──────┬──────┴──────┬──────┘
+               ▼
+        Agent Orchestrator
+               │
+      ┌────────┼────────┐
+      ▼        ▼        ▼
+  Tool Router Scheduler Guardrails
+      │        │        │
+      ▼        ▼        ▼
+ Execution Queue Runtime State
+               │
+               ▼
+        External Services
+```
+
+---
+
+# Responsibilities
+
+The Core package is responsible for:
+
+- bootstrapping the agent
+- coordinating execution
+- routing tools
+- scheduling jobs
+- runtime management
+- context propagation
+- event dispatching
+- enforcing security policies
+- retry handling
+- graceful shutdown
+
+---
+
+# Package Structure
+
+```
+core/
+
+README.md
+__init__.py
+
+agent.py
+runtime.py
+context.py
+orchestrator.py
+lifecycle.py
+
+exceptions.py
+types.py
+
+execution/
+tools/
+events/
+guardrails/
+```
+
+---
+
+# Module Overview
+
+## agent.py
+
+Main autonomous agent implementation.
+
+Responsibilities
+
+- start agent
+- stop agent
+- execute requests
+- manage sessions
+- communicate with orchestrator
+
+---
+
+## runtime.py
+
+Controls runtime initialization.
+
+Responsibilities
+
+- startup
+- shutdown
+- dependency initialization
+- resource management
+
+---
+
+## lifecycle.py
+
+Controls state transitions.
+
+Example
+
+```
+Created
+
+↓
+
+Initialized
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Stopped
+
+↓
+
+Shutdown
+```
+
+---
+
+## context.py
+
+Shared execution context.
+
+Contains
+
+- configuration
+- memory handles
+- blockchain clients
+- RPC manager
+- logger
+- session state
+- execution metadata
+
+---
+
+## orchestrator.py
+
+Central coordinator.
+
+Responsibilities
+
+- receive tasks
+- select tools
+- invoke execution pipeline
+- collect results
+- publish events
+
+---
+
+## execution/
+
+Responsible for task execution.
+
+Contains
+
+- executor
+- scheduler
+- retry engine
+- task queue
+
+---
+
+## tools/
+
+Responsible for tool management.
+
+Contains
+
+- registry
+- router
+- loader
+- validator
+
+---
+
+## guardrails/
+
+Provides runtime protection.
+
+Includes
+
+- permission checks
+- policy engine
+- sandbox
+- risk engine
+
+---
+
+## events/
+
+Implements event-driven architecture.
+
+Contains
+
+- event bus
+- dispatcher
+- event types
+
+---
+
+# Execution Flow
+
+```
+Incoming Request
+        │
+        ▼
+Agent
+        │
+        ▼
+Orchestrator
+        │
+        ▼
+Guardrails
+        │
+        ▼
+Tool Router
+        │
+        ▼
+Execution Engine
+        │
+        ▼
+Blockchain/API/Memory
+        │
+        ▼
+Result
+        │
+        ▼
+Event Bus
+        │
+        ▼
+Response
+```
+
+---
+
+# Design Principles
+
+The Core package follows these principles:
+
+- Modular
+- Async-first
+- Event-driven
+- Strong typing
+- Dependency injection
+- Low coupling
+- High cohesion
+- Fault tolerant
+- Observable
+- Security-first
+
+---
+
+# Security Responsibilities
+
+The Core module never:
+
+- stores private keys
+- signs transactions directly
+- bypasses guardrails
+- exposes secrets
+- executes unvalidated tools
+
+All sensitive operations must pass through:
+
+- Security Layer
+- Validation Layer
+- Guardrails
+- Audit Logging
+
+---
+
+# Error Handling
+
+Every execution path supports
+
+- retries
+- timeout handling
+- cancellation
+- graceful shutdown
+- structured exceptions
+- audit logging
+
+---
+
+# Dependencies
+
+Internal
+
+- config
+- memory
+- contracts
+- state_manager
+- schemas
+
+External
+
+- asyncio
+- pydantic
+- structlog
+- web3.py
+- langgraph
+- langchain
+
+---
+
+# Future Extensions
+
+The architecture is designed to support:
+
+- Multi-agent execution
+- Distributed workers
+- Remote execution
+- Kubernetes deployment
+- Plugin marketplace
+- AI planning engine
+- Autonomous workflows
+- Human approval workflows
+- Multi-chain orchestration
+- Cross-agent communication
+
+---
+
+# Development Rules
+
+Every Core component must:
+
+- be fully typed
+- support async execution
+- avoid circular dependencies
+- use structured logging
+- raise explicit exceptions
+- expose clean public APIs
+- remain independently testable
+
+---
+
+# Related Modules
+
+```
+config/
+memory/
+contracts/
+state_manager/
+schemas/
+```
+
+The Core module coordinates these packages but remains independent of their internal implementations through well-defined interfaces.
+
+---
+
+# Status
+
+**Phase:** 1
+
+**Module:** Core
+
+**Priority:** Critical
+
+**Required Before:**
+
+- Memory
+- Contracts
+- State Manager
+- AI Runtime
+- Tool Execution
+
+---
+
+# Version
+
+Current Version:
+
+**v1.0.0**

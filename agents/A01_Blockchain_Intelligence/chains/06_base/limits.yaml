@@ -1,0 +1,20 @@
+# Base — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: base
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: true  # via keyed provider (ALCHEMY_API_KEY)
+
+finality: rollup
+reorg_depth: 20
+block_time_seconds: 2
+confirmations: 20
+
+limits:
+  - archive access comes from the keyed provider
+  - token decimals are unresolved
+  - native transfers are routinely 0 here; real movement is in token logs
+
+measured_on: "2026-08-14"

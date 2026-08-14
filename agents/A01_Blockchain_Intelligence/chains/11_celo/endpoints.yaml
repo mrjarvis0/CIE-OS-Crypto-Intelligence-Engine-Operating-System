@@ -1,0 +1,28 @@
+# Celo endpoints
+# No keyed providers catalogued for this chain.
+# API keys go in .env.local at the agent root — never in source.
+
+chain: celo
+chain_id: 42220
+protocol: evm_json_rpc
+
+providers:
+  # --- open only (no keyed provider available) ---
+
+  - name: celo-official
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 120/min
+
+  - name: publicnode
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: ankr-public
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min

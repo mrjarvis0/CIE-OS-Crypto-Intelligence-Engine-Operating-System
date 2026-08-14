@@ -1,0 +1,24 @@
+# Ethereum — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: ethereum
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: true  # via keyed provider (ALCHEMY_API_KEY) only
+
+finality: checkpoint
+reorg_depth: 12
+block_time_seconds: 12
+confirmations: 12
+
+limits:
+  - archive access comes from the keyed provider; without ALCHEMY_API_KEY
+    this reverts to recent-state only, and dormancy questions become
+    unanswerable
+  - token decimals are unresolved (needs eth_call), so token amounts are
+    raw base units — comparable within one token and never across tokens
+  - a single block emits 600-2,400 logs, of which a few hundred are
+    transfers; the rest are protocol events A01 does not decode
+
+measured_on: "2026-08-14"

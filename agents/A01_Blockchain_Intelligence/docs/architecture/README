@@ -1,0 +1,299 @@
+# Architecture Documentation
+
+## A01 Blockchain Intelligence Agent
+
+**Project:** CIE-OS (Crypto Intelligence Engine Operating System)
+
+**Agent:** A01 Blockchain Intelligence Agent
+
+**Document Type:** Architecture Documentation Index
+
+**Version:** 1.0.0
+
+**Status:** Master Navigation Document
+
+---
+
+# 1. Purpose
+
+Welcome to the Architecture Documentation of the **A01 Blockchain Intelligence Agent**.
+
+This directory contains the complete technical blueprint of the agent.
+
+Its purpose is to describe **how the system is designed, why it is designed that way, and how every component interacts with the rest of the platform.**
+
+This documentation is the authoritative reference for developers, architects, reviewers, AI coding assistants, and future CIE-OS agents.
+
+---
+
+# 2. Documentation Philosophy
+
+The architecture is documented using the **Docs-as-Code** approach.
+
+Architecture documentation is version-controlled, reviewed, and evolved together with the source code.
+
+Documentation is considered part of the product—not an afterthought.
+
+---
+
+# 3. Objectives
+
+This architecture documentation aims to:
+
+* Explain the complete system architecture.
+* Define component responsibilities.
+* Document data flow and event flow.
+* Prevent architectural drift.
+* Support AI-assisted development.
+* Simplify onboarding.
+* Preserve long-term engineering knowledge.
+
+---
+
+# 4. Intended Audience
+
+This documentation is written for:
+
+* Software Architects
+* Backend Engineers
+* Blockchain Engineers
+* AI Engineers
+* Security Engineers
+* Contributors
+* Reviewers
+* Future CIE-OS Agents
+
+---
+
+# 5. Reading Order
+
+Read the documents in the following sequence. Each builds upon the previous.
+
+## 5.1 Architecture (this directory)
+
+| # | Document | File |
+| --- | --- | --- |
+| 1 | System Overview | `system_overview.md` |
+| 2 | Design Goals | `design_goals.md` |
+| 3 | System Context | `system-context.md` |
+| 4 | Layered Architecture | `layered-architecture.md` |
+| 5 | Component Architecture | `component-architecture.md` |
+| 6 | Folder Architecture | `folder-architecture.md` |
+| 7 | Data Flow | `data-flow.md` |
+| 8 | Event Flow | `event-flow.md` |
+| 9 | Processing Pipeline | `processing-pipeline.md` |
+| 10 | State Management | `state-management.md` |
+| 11 | Communication Architecture | `communication-architecture.md` |
+| 12 | Error Handling | `error-handling.md` |
+| 13 | Security Architecture | `security-architecture.md` |
+| 14 | Observability Architecture | `observability-architecture.md` |
+| 15 | Performance Architecture | `performance-architecture.md` |
+| 16 | Scalability Architecture | `scalability-architecture.md` |
+| 17 | Deployment Architecture | `deployment-architecture.md` |
+| 18 | Testing & Validation | `testing-validation-architecture.md` |
+| 19 | Disaster Recovery & BC | `disaster-recovery-business-continuity.md` |
+| 20 | Future Evolution | `future-evolution-architecture.md` |
+| 21 | Architecture Decisions | `adr/` |
+
+## 5.2 Intelligence Tradecraft (`../intelligence/`)
+
+Architecture describes *how A01 is built*. Tradecraft describes *how A01
+thinks* — the analytical rules governing what it may claim and on what
+evidence. These documents are **normative**: code that contradicts them is a
+defect.
+
+| # | Document | Answers |
+| --- | --- | --- |
+| 22 | `attribution-doctrine.md` | What may A01 claim about who someone is? |
+| 23 | `evidence-standard.md` | What counts as proof, and how is it recorded? |
+| 24 | `detection-catalog.md` | How does each detection actually work? |
+| 25 | `threat-model.md` | Who attacks A01, and how? |
+| 26 | `future-problems.md` | What breaks next, and what do we do now? |
+
+Start at [`../intelligence/README.md`](../intelligence/README.md).
+
+## 5.3 Planned but not yet written
+
+Previous versions of this index listed these as if they existed. They do not.
+Several also referenced modules (`sensors/`, `ingestion/`, `normalization/`)
+that are not present in the codebase; those names should be reconciled against
+`folder-architecture.md` before the documents are written.
+
+- Dependency Rules
+- Interface Contracts
+- Plugin Architecture
+- Memory Architecture
+- Database Architecture
+- Ingestion & Normalization Architecture
+- Decision Architecture
+- AI Architecture
+
+---
+
+# 6. Architecture Principles
+
+The architecture follows these principles:
+
+* Modular Design
+* Layered Architecture
+* Event-Driven Processing
+* Async-First Execution
+* Explainable Intelligence
+* Vendor Neutrality
+* Plugin Extensibility
+* Security by Design
+* Testability
+* Maintainability
+
+---
+
+# 7. Documentation Structure
+
+```text
+architecture/
+│
+├── README.md
+├── 01-system-overview.md
+├── 02-design-goals.md
+├── ...
+├── 30-architecture-decisions.md
+│
+├── diagrams/
+│
+└── adr/
+```
+
+---
+
+# 8. Architecture Governance
+
+Architecture documentation must always remain synchronized with implementation.
+
+Every major architectural change requires:
+
+* Documentation update
+* Architecture review
+* ADR (Architecture Decision Record)
+* Version update (when applicable)
+
+No undocumented architectural change is considered complete.
+
+---
+
+# 9. Diagram Standards
+
+All diagrams must:
+
+* Match the latest implementation.
+* Use consistent terminology.
+* Reference official glossary terms.
+* Avoid implementation-specific details unless required.
+
+Preferred diagram categories include:
+
+* Context
+* Layer
+* Component
+* Data Flow
+* Event Flow
+* Sequence
+* Deployment
+
+---
+
+# 10. Architecture Decision Records (ADR)
+
+Important architectural decisions are documented separately inside the **adr/** directory.
+
+Every ADR should explain:
+
+* Context
+* Decision
+* Alternatives Considered
+* Consequences
+* Status
+
+Architecture documents describe the system.
+
+ADRs explain **why** it evolved that way.
+
+---
+
+# 11. Versioning
+
+This documentation follows the project versioning policy.
+
+Major architecture changes require:
+
+* Architecture review
+* ADR
+* Changelog update
+* Documentation update
+
+---
+
+# 12. Contribution Rules
+
+Contributors must:
+
+* Follow official terminology.
+* Respect dependency rules.
+* Preserve layer boundaries.
+* Avoid undocumented architectural shortcuts.
+* Keep diagrams synchronized with documentation.
+
+---
+
+# 13. Relationship with Other Documents
+
+This documentation complements:
+
+* identity/architecture.md
+* design_rules.md
+* coding_standards.md
+* constraints.md
+* non_functional_requirements.md
+* roadmap.md
+
+The Identity package defines **what** the architecture must achieve.
+
+This Architecture Pack explains **how** it achieves those goals.
+
+---
+
+# 14. Future Expansion
+
+The architecture is intentionally designed to support:
+
+* Additional blockchains
+* Additional intelligence agents
+* Plugin ecosystem
+* Distributed processing
+* AI model upgrades
+* New data providers
+
+without requiring fundamental redesign.
+
+---
+
+# 15. Success Criteria
+
+The Architecture Documentation is considered complete when:
+
+* Every architectural layer is documented.
+* Every component has a defined responsibility.
+* Every dependency is documented.
+* Every major decision has an ADR.
+* Documentation remains synchronized with implementation.
+
+---
+
+# 16. Final Statement
+
+The Architecture Documentation is the technical blueprint of the A01 Blockchain Intelligence Agent.
+
+It ensures that every implementation decision is traceable, reviewable, maintainable, and aligned with the long-term vision of the CIE-OS platform.
+
+---
+
+**End of Architecture Documentation Index**

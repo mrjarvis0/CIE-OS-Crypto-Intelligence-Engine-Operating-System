@@ -1,0 +1,216 @@
+# CIE-OS / A01 Blockchain Intelligence Agent
+# blockchain/ subsystem manifest
+#
+# Machine-readable companion to ARCHITECTURE.md. Records what each module is
+# for, whether it exists, and where a responsibility already lives when it is
+# not implemented here.
+#
+# `status` values:
+#   implemented  - working and tested
+#   partial      - some of the responsibility is met
+#   delegated    - deliberately not built here; owner named
+#   empty        - directory exists, no implementation
+#   planned      - not started
+
+name: blockchain
+description: >-
+  A01's live chain data subsystem: everything between a node's JSON-RPC port
+  and a canonical fact a skill can reason over.
+
+boundary:
+  pure_layer: tools/blockchain
+  live_layer: blockchain
+  rule: >-
+    Codecs, client contracts and Local* stubs live in tools/blockchain and
+    never touch the network. Anything that can fail because a remote host
+    failed lives in blockchain/.
+
+invariants:
+  - id: determined-vs-empty
+    rule: >-
+      Every read reports whether A01 obtained the answer. "The chain has
+      nothing" and "A01 could not ask" must never collapse into one result.
+    enforced_by: blockchain/rpc/clients/dispatch.py::CallResult.determined
+
+  - id: capability-before-dispatch
+    rule: >-
+      A capability a call requires is checked before the request goes out. A
+      non-archive endpoint may answer a historical query with latest state
+      rather than an error.
+    enforced_by: blockchain/rpc/clients/dispatch.py::ChainDispatcher.call
+
+  - id: no-credential-in-provenance
+    rule: >-
+      Evidence provenance names the provider, never the endpoint URL, because
+      a keyed URL carries the credential in its path.
+    enforced_by: blockchain/rpc/clients/dispatch.py::CallResult.provenance
+
+  - id: linkage-not-numbers
+    rule: >-
+      Chain continuity is established by parent-hash linkage. Block numbers
+      cannot detect a reorg, because the replacement carries the same number.
+    enforced_by: blockchain/reorg/detector.py::ChainTracker.observe
+
+  - id: finality-violations-escalate
+    rule: >-
+      A reorg below the finalized point is an incident, not a deep reorg. It
+      is never absorbed silently.
+    enforced_by: blockchain/reorg/detector.py::ReorgEvent.crossed_finality
+
+  - id: detection-does-not-mutate
+    rule: >-
+      observe() reports; accept_reorg() acts. A reorg that crossed finality
+      must not be applied without a decision.
+    enforced_by: blockchain/reorg/detector.py
+
+modules:
+  rpc/providers:
+    status: implemented
+    purpose: Endpoint catalog and credential resolution.
+    endpoints: 98
+    chains: 9
+    keyed_providers: 16
+    tests: 39
+    notes: >-
+      Every chain reachable with no credential. rpc_overrides() feeds the
+      existing build_default_rpc_registry() unchanged.
+
+  rpc/clients:
+    status: implemented
+    purpose: Dispatch, execution, caching, provenance.
+    consumes:
+      - config/rpc/rpc_manager.py
+      - config/rpc/fallback.py
+      - tools/adapters/rpc.py
+      - tools/adapters/rest.py
+
+  rpc/rate_limit:
+    status: implemented
+    purpose: Per-provider token buckets sized to free-tier budgets.
+    notes: Spends 80% of documented ceilings; an observed 429 overrides them.
+
+  rpc/health_check:
+    status: empty
+    purpose: Active endpoint probing.
+    notes: >-
+      Health is currently inferred from real traffic through the circuit
+      breaker, which costs nothing extra but only learns about an endpoint
+      once a real request has already failed on it.
+
+  rpc/load_balancer:
+    status: delegated
+    owner: config/rpc/rpc_manager.py
+    reason: Endpoint resolution, ranking and health tracking already implemented.
+
+  rpc/failover:
+    status: delegated
+    owner: config/rpc/fallback.py
+    reason: Circuit breaker with failure thresholds and cooldown already implemented.
+
+  decoding:
+    status: delegated
+    owner: tools/blockchain/evm.py
+    reason: ABI codecs, selectors, event topics, block and log parsing already implemented.
+
+  adapters/explorers:
+    status: delegated
+    owner: tools/blockchain/explorer.py
+    reason: >-
+      ExplorerClient contract exists; the live implementation belongs in
+      rpc/clients, not a parallel adapter tree.
+
+  reorg:
+    status: partial
+    implemented: [finality.py, detector.py]
+    planned: [rollback, reconciliation, tracker-persistence]
+    tests: 28
+    blocked_by: storage
+    notes: >-
+      Rollback and reconciliation act on stored data. A01 has no blockchain
+      storage layer, so they would be an undo for a write that does not exist.
+
+  chains:
+    status: empty
+    purpose: Per-chain metadata as configuration.
+    notes: >-
+      Chain metadata currently lives in config/rpc/chains.py as typed
+      dataclasses, which is stronger than YAML. Splitting it out is not yet
+      justified.
+
+  nodes:
+    status: planned
+    purpose: Self-hosted full, archive and light node management.
+    notes: A01 runs no node today; all access is via third-party providers.
+
+  entities:
+    status: planned
+    priority: next
+    purpose: Canonical block, transaction, wallet, contract and token models.
+
+  indexing:
+    status: planned
+    priority: next
+    depends_on: [entities, indexing/checkpoint]
+
+  ingestion:
+    status: planned
+    depends_on: [indexing, reorg]
+    notes: >-
+      Backfill (parallel, historical) and forward-fill (sequential, live) are
+      separate modes. Their seam is the DUPLICATE observation.
+
+  storage:
+    status: planned
+    purpose: Data lifecycle boundary — raw, normalized, indexed, snapshots, archives.
+    notes: The system of record is database/, which does not exist yet.
+
+  validation:
+    status: partial
+    implemented: [rpc endpoint validation via config/rpc/rpc_config.py]
+    planned: [block, transaction, event, cross_source, consistency]
+
+  monitoring:
+    status: partial
+    implemented:
+      - blockchain/rpc/clients/dispatch.py::ChainDispatcher.health
+      - blockchain/reorg/detector.py::ChainTracker.snapshot
+    planned: [sync_status, lag, missing_blocks, aggregation]
+
+  flows:
+    status: planned
+    depends_on: [indexing, storage]
+
+  labeling:
+    status: planned
+    depends_on: [entities, storage]
+
+  analytics:
+    status: planned
+    depends_on: [indexing, storage]
+
+  security:
+    status: planned
+    purpose: Exploit, rug and approval-risk detection.
+    notes: Distinct from config/security/, which handles secrets.
+
+constraints:
+  free_tier:
+    reachable_without_credentials: true
+    evm_archive_available: false
+    bitcoin_archive_available: true
+    consequence: >-
+      EVM dormancy detection and EVM detector backtesting are unavailable on
+      the free tier, so `validated` detector maturity is unreachable until an
+      archive key is supplied.
+    unlocked_by: [ALCHEMY_API_KEY, QUICKNODE_URL, BLOCKPI_API_KEY]
+
+build_order:
+  rule: vertical-slice — one chain end to end before breadth
+  sequence:
+    - entities/blocks + entities/transactions
+    - indexing/checkpoint
+    - indexing/block_indexer (Ethereum only)
+    - ingestion/backfill + ingestion/polling
+    - storage via database/
+    - one skill end to end
+    - second chain, then breadth

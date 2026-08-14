@@ -1,0 +1,116 @@
+# Ethereum endpoints
+# API keys go in .env.local at the agent root — never in source.
+# After adding a key, run: python -m cli providers
+
+chain: ethereum
+chain_id: 1
+protocol: evm_json_rpc
+
+providers:
+  # --- keyed (free tier, need signup) ---
+
+  - name: alchemy
+    access: keyed_free
+    env_var: ALCHEMY_API_KEY
+    # Get at: alchemy.com -> new app -> copy key (free, no card)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: infura
+    access: keyed_free
+    env_var: INFURA_API_KEY, INFURA_PROJECT_ID
+    # Get at: infura.io (free tier is latest-state only, no archive)
+    archive: false
+    logs: true
+    rate_limit: 300/min
+
+  - name: quicknode
+    access: keyed_free
+    env_var: QUICKNODE_URL
+    # Get at: quicknode.com (issues a full URL, not a bare key)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: chainstack
+    access: keyed_free
+    env_var: CHAINSTACK_URL
+    # Get at: chainstack.com (per-node URL, like QuickNode)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: drpc
+    access: keyed_free
+    env_var: DRPC_API_KEY
+    # Get at: drpc.org
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: blockpi
+    access: keyed_free
+    env_var: BLOCKPI_API_KEY
+    # Get at: blockpi.io
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: getblock
+    access: keyed_free
+    env_var: GETBLOCK_API_KEY
+    # Get at: getblock.io
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  # --- open (no key needed) ---
+
+  - name: publicnode
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 120/min
+
+  - name: llamarpc
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: ankr-public
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: cloudflare
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: 1rpc
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: drpc-public
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: flashbots
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: merkle
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min

@@ -1,0 +1,21 @@
+# Polygon — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: polygon
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: true  # via keyed provider (ALCHEMY_API_KEY)
+
+finality: checkpoint
+reorg_depth: 128
+block_time_seconds: 2
+confirmations: 128
+
+limits:
+  - archive access comes from the keyed provider
+  - token decimals are unresolved
+  - deep reorgs are normal before checkpoint; a shallow confirmation
+    depth here produces withdrawals that need not have happened
+
+measured_on: "2026-08-14"

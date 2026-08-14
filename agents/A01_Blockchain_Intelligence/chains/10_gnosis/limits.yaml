@@ -1,0 +1,23 @@
+# Gnosis Chain — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: gnosis
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: checkpoint
+reorg_depth: 32
+block_time_seconds: 5
+confirmations: 32
+
+limits:
+  - no archive endpoint on the free tier
+  - no keyed provider is catalogued
+  - token decimals are unresolved
+  - the native unit is xDAI, a stablecoin — a materiality floor of 1e18
+    means roughly one dollar here and roughly four thousand on Ethereum,
+    so a floor carried across chains is not one threshold
+
+measured_on: "2026-08-14"

@@ -1,0 +1,374 @@
+# Memory Module
+
+> Runtime Memory System for the CIE-OS A01 Blockchain Intelligence Agent.
+
+---
+
+# Purpose
+
+The `memory/` module provides the runtime memory system used by the Blockchain Intelligence Agent during reasoning, investigation, decision making, and multi-step execution.
+
+Memory is **not** the permanent source of truth.
+
+Permanent blockchain data belongs to the `database/` layer.
+
+The memory layer exists to provide temporary context, active reasoning state, cached knowledge, embeddings, and conversation history while an agent is executing.
+
+If the memory is completely cleared, it must always be recoverable from the database and external knowledge sources.
+
+---
+
+# Responsibilities
+
+The memory subsystem is responsible for:
+
+* Runtime context
+* Working memory
+* Conversation history
+* Session state
+* Semantic retrieval
+* Vector search
+* Embedding management
+* Memory summarization
+* Context compression
+* Memory ranking
+* Memory filtering
+* Temporary cache
+* Agent scratchpad
+* Retrieval context building
+
+---
+
+# What Memory IS
+
+Memory stores information that is useful while the agent is actively reasoning.
+
+Examples include:
+
+* Current investigation state
+* Recent wallet observations
+* Recently analyzed transactions
+* Current blockchain narrative
+* Session conversation history
+* Cached reasoning
+* Temporary evidence
+* Embedding search results
+* Intermediate AI thoughts
+* Runtime context
+
+---
+
+# What Memory IS NOT
+
+Memory is **never** used for permanent storage.
+
+The following data must never exist only inside memory:
+
+* Blockchain history
+* Wallet database
+* Transaction database
+* Token metadata
+* Protocol records
+* Permanent analytics
+* Historical datasets
+
+These belong inside the `database/` layer.
+
+---
+
+# Memory Architecture
+
+```
+User Request
+      │
+      ▼
+Conversation
+      │
+      ▼
+Short-Term Memory
+      │
+      ▼
+Context Builder
+      │
+      ▼
+Semantic Retrieval
+      │
+      ▼
+Vector Memory
+      │
+      ▼
+Long-Term Memory
+      │
+      ▼
+Reasoning Engine
+      │
+      ▼
+Response
+```
+
+---
+
+# Module Structure
+
+```
+memory/
+│
+├── README.md
+├── __init__.py
+│
+├── base/
+├── conversation/
+├── vector/
+├── storage/
+├── summarization/
+├── retrieval/
+├── schemas/
+└── utils/
+```
+
+---
+
+# Folder Overview
+
+## base/
+
+Contains abstract interfaces and shared implementations.
+
+Examples:
+
+* BaseMemory
+* MemoryManager
+* ShortTermMemory
+* LongTermMemory
+* VectorMemory
+* ConversationMemory
+* BaseSummarizer
+
+---
+
+## conversation/
+
+Conversation-specific runtime memory.
+
+Responsibilities:
+
+* Chat history
+* Sessions
+* Message windows
+* Context trimming
+
+---
+
+## vector/
+
+Semantic memory.
+
+Responsibilities:
+
+* Embeddings
+* Similarity search
+* Chroma integration
+* Vector retrieval
+* Namespace management
+
+---
+
+## storage/
+
+Memory persistence backends.
+
+Supported backends:
+
+* Redis
+* PostgreSQL
+* SQLite
+* Local filesystem
+
+---
+
+## summarization/
+
+Compresses memory while preserving useful information.
+
+Responsibilities:
+
+* Conversation summarization
+* Context compression
+* Importance scoring
+* Memory filtering
+
+---
+
+## retrieval/
+
+Builds the reasoning context.
+
+Responsibilities:
+
+* Semantic search
+* Hybrid retrieval
+* Ranking
+* Filtering
+* Context assembly
+
+---
+
+## schemas/
+
+Typed data models.
+
+Examples:
+
+* MemoryEntry
+* ConversationMessage
+* Session
+* RetrievalResult
+
+---
+
+## utils/
+
+Shared helper utilities.
+
+Examples:
+
+* Serialization
+* Token counting
+* Hashing
+* Metrics
+
+---
+
+# Memory Types
+
+The memory system supports multiple logical memory types.
+
+## Short-Term Memory
+
+Maintains information required during the current execution.
+
+Examples:
+
+* Current wallet
+* Current transaction
+* Active reasoning state
+
+---
+
+## Long-Term Memory
+
+Stores reusable knowledge across executions.
+
+Examples:
+
+* Investigation summaries
+* Learned patterns
+* User preferences
+* Historical context
+
+---
+
+## Conversation Memory
+
+Maintains dialogue continuity.
+
+---
+
+## Vector Memory
+
+Stores embeddings for semantic retrieval.
+
+---
+
+# Memory Lifecycle
+
+```
+Observation
+      │
+      ▼
+Filtering
+      │
+      ▼
+Importance Scoring
+      │
+      ▼
+Storage
+      │
+      ▼
+Embedding
+      │
+      ▼
+Retrieval
+      │
+      ▼
+Context Builder
+      │
+      ▼
+Reasoning
+```
+
+---
+
+# Design Principles
+
+The memory subsystem follows these principles:
+
+* Runtime-first
+* Async-first
+* Strongly typed
+* Modular
+* Backend independent
+* Retrieval driven
+* Namespace aware
+* Testable
+* Scalable
+* Recoverable
+
+---
+
+# Integration
+
+The memory module interacts with:
+
+* core/
+* database/
+* skills/
+* intelligence/
+* decision/
+* models/
+
+Memory never bypasses these architectural boundaries.
+
+---
+
+# Future Roadmap
+
+Planned enhancements include:
+
+* Graph memory
+* Cross-agent shared memory
+* Memory decay
+* Knowledge consolidation
+* Hybrid symbolic + vector memory
+* Distributed memory synchronization
+* Adaptive retrieval policies
+
+---
+
+# Development Rules
+
+1. Memory is not the database.
+2. Database remains the permanent source of truth.
+3. All public APIs must be asynchronous where appropriate.
+4. Memory implementations must inherit from `BaseMemory`.
+5. Storage backends must be interchangeable.
+6. Retrieval must remain backend independent.
+7. Memory should always be reconstructable from permanent data.
+
+---
+
+# Status
+
+Current Status: **Foundation**
+
+This README serves as the authoritative design document for every component inside the `memory/` package.

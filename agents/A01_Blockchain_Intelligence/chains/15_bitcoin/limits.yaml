@@ -1,0 +1,25 @@
+# Bitcoin — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: bitcoin
+chain_type: bitcoin_like  # UTXO, NOT account-based
+has_sensor: false  # no UtxoSensor built
+supports_logs: false
+archive_available: false
+
+finality: probabilistic
+reorg_depth: 6
+block_time_seconds: 600  # ~10 minutes
+confirmations: 6
+
+limits:
+  - no sensor — the RPC dialect is not EVM, so registered endpoints are
+    reachable and unusable; A01 cannot observe this chain at all
+  - UTXO, not accounts — there are no addresses with balances to profile
+    and no event logs, so most of A01's analysis has no counterpart here
+  - common-input-ownership heuristics are probabilistic, not deterministic
+  - change-address detection produces false positives routinely
+  - 10-minute blocks make real-time monitoring impractical compared to
+    EVM chains with sub-second block times
+
+measured_on: "2026-08-14"

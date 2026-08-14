@@ -1,0 +1,71 @@
+# Optimism endpoints
+# API keys go in .env.local at the agent root — never in source.
+
+chain: optimism
+chain_id: 10
+protocol: evm_json_rpc
+
+providers:
+  # --- keyed (free tier) ---
+
+  - name: alchemy
+    access: keyed_free
+    env_var: ALCHEMY_API_KEY
+    # Get at: alchemy.com (same key covers Optimism)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: infura
+    access: keyed_free
+    env_var: INFURA_API_KEY, INFURA_PROJECT_ID
+    # Get at: infura.io
+    archive: false
+    logs: true
+    rate_limit: 300/min
+
+  - name: drpc
+    access: keyed_free
+    env_var: DRPC_API_KEY
+    # Get at: drpc.org
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  # --- open ---
+
+  - name: optimism-official
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 120/min
+
+  - name: publicnode
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: llamarpc
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: ankr-public
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: 1rpc
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: drpc-public
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min

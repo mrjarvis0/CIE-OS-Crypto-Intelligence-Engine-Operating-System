@@ -1,0 +1,21 @@
+# Avalanche C-Chain — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: avalanche
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: instant
+reorg_depth: 5
+block_time_seconds: 2
+confirmations: 12
+
+limits:
+  - no archive endpoint on the free tier
+  - token decimals are unresolved
+  - consensus finalises in seconds, so a deep confirmation wait costs
+    freshness without buying safety
+
+measured_on: "2026-08-14"

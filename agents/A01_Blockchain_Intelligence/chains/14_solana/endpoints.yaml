@@ -1,0 +1,58 @@
+# Solana endpoints
+# A01 cannot observe Solana yet (no sensor), but endpoints are reachable.
+# API keys go in .env.local at the agent root — never in source.
+
+chain: solana
+chain_id: null
+protocol: solana_json_rpc
+
+providers:
+  # --- keyed (free tier) ---
+
+  - name: helius
+    access: keyed_free
+    env_var: HELIUS_API_KEY
+    # Get at: helius.dev (Solana-specific; better than public endpoints)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: quicknode
+    access: keyed_free
+    env_var: QUICKNODE_URL
+    # Get at: quicknode.com (issues a full URL)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  # --- open ---
+
+  - name: solana-official
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: publicnode
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: ankr-public
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: 1rpc
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: drpc-public
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min

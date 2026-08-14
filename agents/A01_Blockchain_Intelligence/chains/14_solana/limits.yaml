@@ -1,0 +1,23 @@
+# Solana — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: solana
+chain_type: solana_like
+has_sensor: false  # no SolanaSensor built
+supports_logs: false
+archive_available: false
+
+finality: checkpoint
+reorg_depth: 32
+block_time_seconds: 1
+confirmations: 32
+
+limits:
+  - no sensor — the RPC dialect is not EVM, so registered endpoints are
+    reachable and unusable; A01 cannot observe this chain at all
+  - slots differ from blocks and can be skipped, so height arithmetic
+    that works on EVM does not transfer
+  - commitment levels are processed/confirmed/finalized; finalized sits
+    roughly 32 slots back
+
+measured_on: "2026-08-14"

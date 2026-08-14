@@ -1,0 +1,23 @@
+# BNB Smart Chain — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: bnb_chain
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: probabilistic
+reorg_depth: 15
+block_time_seconds: 3
+confirmations: 15
+
+limits:
+  - no archive endpoint on the free tier, so historical state is
+    unreachable; block and log history is fine, contract state at
+    depth is not
+  - token decimals are unresolved
+  - short block time and a small validator set make reorgs more common
+    than on Ethereum; the withdrawal path sees more use here
+
+measured_on: "2026-08-14"

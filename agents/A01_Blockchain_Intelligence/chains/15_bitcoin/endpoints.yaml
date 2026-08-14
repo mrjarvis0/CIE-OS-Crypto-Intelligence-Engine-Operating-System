@@ -1,0 +1,43 @@
+# Bitcoin endpoints
+# Bitcoin uses Esplora REST, not JSON-RPC. Public Bitcoin JSON-RPC is
+# not a thing — Esplora (Blockstream) and mempool.space are the practical
+# way to read Bitcoin without running a node.
+# API keys go in .env.local at the agent root — never in source.
+
+chain: bitcoin
+chain_id: null
+protocol: esplora_rest
+
+providers:
+  # --- keyed (free tier) ---
+
+  - name: nownodes
+    access: keyed_free
+    env_var: NOWNODES_API_KEY
+    # Get at: nownodes.io (covers Bitcoin JSON-RPC and EVM)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  # --- open ---
+
+  - name: blockstream
+    access: open
+    # Blockstream's Esplora instance — the reference implementation
+    archive: true
+    logs: false
+    rate_limit: 60/min
+
+  - name: mempool-space
+    access: open
+    # mempool.space Esplora-compatible API
+    archive: true
+    logs: false
+    rate_limit: 60/min
+
+  - name: blockcypher
+    access: open
+    # Vendor REST — very low rate limit on free tier
+    archive: true
+    logs: false
+    rate_limit: 3/min

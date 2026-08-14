@@ -1,0 +1,65 @@
+# Base endpoints
+# API keys go in .env.local at the agent root — never in source.
+
+chain: base
+chain_id: 8453
+protocol: evm_json_rpc
+
+providers:
+  # --- keyed (free tier) ---
+
+  - name: alchemy
+    access: keyed_free
+    env_var: ALCHEMY_API_KEY
+    # Get at: alchemy.com (same key covers Base)
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: drpc
+    access: keyed_free
+    env_var: DRPC_API_KEY
+    # Get at: drpc.org
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  - name: blockpi
+    access: keyed_free
+    env_var: BLOCKPI_API_KEY
+    # Get at: blockpi.io
+    archive: true
+    logs: true
+    rate_limit: 300/min
+
+  # --- open ---
+
+  - name: base-official
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 120/min
+
+  - name: publicnode
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: llamarpc
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min
+
+  - name: 1rpc
+    access: open
+    archive: false
+    logs: false
+    rate_limit: 60/min
+
+  - name: drpc-public
+    access: open
+    archive: false
+    logs: true
+    rate_limit: 60/min

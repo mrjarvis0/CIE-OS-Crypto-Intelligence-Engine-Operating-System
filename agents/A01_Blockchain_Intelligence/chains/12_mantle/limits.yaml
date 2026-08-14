@@ -1,0 +1,24 @@
+# Mantle — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: mantle
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: rollup
+reorg_depth: 20
+block_time_seconds: 2
+confirmations: 20
+
+limits:
+  - no archive endpoint on the free tier
+  - no keyed provider is catalogued
+  - token decimals are unresolved
+  - native transfers are routinely 0 here; real movement is in token logs
+  - the native unit is MNT, not ether, so a value expressed in ether is
+    meaningless here; comparing native totals across chains compares
+    different assets
+
+measured_on: "2026-08-14"

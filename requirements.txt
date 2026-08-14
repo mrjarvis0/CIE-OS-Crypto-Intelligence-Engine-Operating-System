@@ -1,0 +1,35 @@
+# CIE-OS runtime dependencies
+#
+# Generated from the third-party imports actually present in
+# agents/A01_Blockchain_Intelligence. Requires Python >= 3.12
+# (the codebase uses StrEnum, PEP 604 unions and datetime.UTC).
+#
+#   pip install -r requirements.txt
+
+# --- Required -----------------------------------------------------------
+# config/settings.py imports these unguarded; without them `config.settings`
+# fails to import and the agent cannot start.
+pydantic>=2.7,<3
+pydantic-settings>=2.3,<3
+
+# --- Storage backends ---------------------------------------------------
+# memory/storage/* selects a backend at runtime. Install the ones you use.
+aiosqlite>=0.20
+asyncpg>=0.29
+redis>=5.0
+
+# --- Optional -----------------------------------------------------------
+# Each of these sits behind a guarded import, so the agent runs without
+# them; the corresponding feature is simply unavailable.
+#
+#   chromadb            memory/base/long_term.py  - vector store backend
+#   grpcio              tools/adapters/grpc.py    - gRPC tool adapter
+#   msgpack             planning/utils/serialization.py - msgpack codec
+#   PyYAML              planning/utils/serialization.py - YAML codec
+#   opentelemetry-api   config/logging.py         - trace correlation in logs
+#
+# chromadb>=0.5
+# grpcio>=1.62
+# msgpack>=1.0
+# PyYAML>=6.0
+# opentelemetry-api>=1.25

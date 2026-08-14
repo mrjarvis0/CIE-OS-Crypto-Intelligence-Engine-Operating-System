@@ -1,0 +1,26 @@
+# Scroll — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: scroll
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: rollup
+reorg_depth: 20
+block_time_seconds: 10  # measured 10.1s; demand-driven
+confirmations: 20
+
+limits:
+  - no archive endpoint on the free tier
+  - no keyed provider is catalogued
+  - token decimals are unresolved
+  - native transfers are routinely 0 here; real movement is in token logs
+  - the finalized tag is unusable — reads 18.9M blocks behind head; safe
+    reads null; finality here is unestablished rather than approximated
+  - not served by Etherscan V2, so its only explorer is Blockscout and
+    label coverage is thinner
+  - blocks are produced on demand — 10.1s measured over 500 blocks
+
+measured_on: "2026-08-14"

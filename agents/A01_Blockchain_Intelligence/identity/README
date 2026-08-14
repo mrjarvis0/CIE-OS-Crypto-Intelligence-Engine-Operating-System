@@ -1,0 +1,131 @@
+# Identity Layer
+
+## Overview
+
+The **Identity Layer** defines the foundational identity of the **A01 Blockchain Intelligence Agent** within the CIE-OS ecosystem.
+
+This layer contains the architectural contracts that describe **what the agent is, why it exists, what responsibilities it owns, and what boundaries it must never cross.**
+
+No production logic, business rules, blockchain processing, or implementation code belongs in this layer.
+
+Instead, this layer acts as the permanent reference for every future development phase.
+
+---
+
+# Purpose
+
+The Identity Layer exists to answer the following questions before any code is written:
+
+* What is this agent?
+* Why does it exist?
+* What problems does it solve?
+* What are its responsibilities?
+* What are its limitations?
+* How should the rest of the CIE-OS ecosystem interact with it?
+* How will success be measured?
+
+---
+
+# Design Philosophy
+
+The A01 Blockchain Intelligence Agent follows a **Documentation-First Engineering** approach.
+
+Architecture is defined before implementation.
+
+Responsibilities are defined before features.
+
+Interfaces are defined before integrations.
+
+Code must always implement documented behavior—not redefine it.
+
+---
+
+# Identity Documents
+
+This folder contains the following documents.
+
+| Document            | Purpose                                       |
+| ------------------- | --------------------------------------------- |
+| agent_profile.md    | Official identity of the agent                |
+| mission.md          | Vision, mission and long-term purpose         |
+| objectives.md       | Measurable objectives                         |
+| scope.md            | Functional boundaries                         |
+| responsibilities.md | Agent responsibilities                        |
+| capabilities.md     | Complete capability catalogue                 |
+| limitations.md      | Known limitations and non-goals               |
+| architecture.md     | High-level intelligence architecture          |
+| lifecycle.md        | Runtime lifecycle                             |
+| interfaces.md       | Internal and external communication contracts |
+| glossary.md         | Official terminology                          |
+| success_criteria.md | Definition of success                         |
+
+---
+
+# Development Rules
+
+The Identity Layer is considered a **Design Contract**.
+
+Every future module must remain compatible with these documents.
+
+No implementation is allowed to contradict this layer without updating the corresponding design document first.
+
+---
+
+# Ownership
+
+Project
+
+CIE-OS
+
+Agent
+
+A01 Blockchain Intelligence Agent
+
+Layer
+
+Identity
+
+Status
+
+Foundation Layer
+
+Version
+
+1.0.0
+
+---
+
+# Reading Order
+
+Developers and AI assistants should read the documents in the following order:
+
+1. agent_profile.md
+2. mission.md
+3. objectives.md
+4. scope.md
+5. responsibilities.md
+6. capabilities.md
+7. limitations.md
+8. architecture.md
+9. lifecycle.md
+10. interfaces.md
+11. glossary.md
+12. success_criteria.md
+
+Following this order ensures that implementation decisions are made from documented intent rather than assumptions.
+
+---
+
+# Engineering Principle
+
+**Identity defines behavior.**
+
+Behavior defines architecture.
+
+Architecture defines implementation.
+
+Implementation must never redefine identity.
+
+---
+
+**End of Document**

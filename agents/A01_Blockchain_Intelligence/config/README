@@ -1,0 +1,331 @@
+# Configuration Framework
+
+## A01 Blockchain Intelligence Agent
+
+**Project:** CIE-OS (Crypto Intelligence Engine Operating System)
+
+**Module:** Configuration Framework
+
+**Path:** `config/`
+
+**Version:** 1.0.0
+
+---
+
+# 1. Overview
+
+The Configuration Framework is the single source of truth for all runtime configuration used by the A01 Blockchain Intelligence Agent.
+
+Every module within the agent must obtain configuration through this framework. Direct access to environment variables, hardcoded constants, or secret files outside this module is prohibited.
+
+The framework provides:
+
+* Strongly typed configuration
+* Environment isolation
+* Multi-chain configuration
+* RPC failover management
+* Secret management
+* Feature flags
+* Runtime validation
+* Consistent application startup
+
+---
+
+# 2. Design Goals
+
+The Configuration Framework is designed to:
+
+* Eliminate hardcoded configuration
+* Validate configuration before startup
+* Support multiple deployment environments
+* Simplify adding new blockchain networks
+* Centralize provider configuration
+* Isolate secrets from application code
+* Provide predictable configuration behavior
+
+---
+
+# 3. Responsibilities
+
+The `config/` module is responsible for:
+
+* Loading application settings
+* Environment detection
+* RPC configuration
+* Blockchain metadata
+* Provider configuration
+* Feature flags
+* Logging configuration
+* Cache configuration
+* Secret loading
+* Configuration validation
+
+It is **not** responsible for business logic, blockchain processing, or database operations.
+
+---
+
+# 4. Architecture
+
+```text
+Environment Variables
+        │
+        ▼
+Dotenv Files
+        │
+        ▼
+Secrets Directory
+        │
+        ▼
+Pydantic Settings
+        │
+        ▼
+Validation
+        │
+        ▼
+Configuration Objects
+        │
+        ▼
+Application Runtime
+```
+
+Configuration is loaded once during application startup and shared throughout the runtime.
+
+---
+
+# 5. Configuration Loading Priority
+
+Configuration sources are resolved in the following order (highest priority first):
+
+1. Runtime overrides
+2. Environment variables
+3. `.env` files
+4. Secret files
+5. Default values
+
+Higher-priority sources override lower-priority sources.
+
+---
+
+# 6. Directory Structure
+
+```text
+config/
+│
+├── settings.py
+├── environment.py
+├── constants.py
+├── paths.py
+├── feature_flags.py
+├── logging.py
+├── cache.py
+│
+├── rpc/
+├── providers/
+├── security/
+├── templates/
+│
+└── README.md
+```
+
+Each file has a single, well-defined responsibility.
+
+---
+
+# 7. Environment Strategy
+
+Supported environments:
+
+* Development
+* Testing
+* Staging
+* Production
+
+Each environment has independent configuration while sharing the same application code.
+
+---
+
+# 8. Multi-Chain Support
+
+The configuration framework supports multiple blockchain networks through chain-specific metadata.
+
+Each chain configuration defines:
+
+* Chain identifier
+* Native currency
+* RPC endpoints
+* Explorer URL
+* Confirmation policy
+* Block timing
+* Network status
+
+Adding a new blockchain must require configuration changes only, without modifying the framework.
+
+---
+
+# 9. RPC Management
+
+RPC endpoints are managed centrally.
+
+The framework supports:
+
+* Multiple endpoints per chain
+* Priority ordering
+* Automatic failover
+* Health monitoring
+* Retry policies
+* Timeout configuration
+
+Application modules never select RPC endpoints directly.
+
+---
+
+# 10. Secret Management
+
+Sensitive information includes:
+
+* API keys
+* RPC credentials
+* Database credentials
+* Service tokens
+
+Secrets are never:
+
+* Hardcoded
+* Logged
+* Committed to source control
+
+Secrets are injected through supported configuration sources.
+
+---
+
+# 11. Feature Flags
+
+Feature flags enable controlled activation of capabilities.
+
+Examples include:
+
+* Experimental intelligence engines
+* AI reasoning
+* Advanced analytics
+* Beta integrations
+
+Feature flags allow safe incremental deployment.
+
+---
+
+# 12. Validation
+
+Every configuration value is validated before application startup.
+
+Validation includes:
+
+* Required values
+* Type correctness
+* URL format
+* Numeric ranges
+* Blockchain identifiers
+* File paths
+
+Startup fails if validation fails.
+
+---
+
+# 13. Security Principles
+
+The configuration framework follows:
+
+* Least privilege
+* Secret isolation
+* Validation-first loading
+* Immutable runtime configuration
+* Secure defaults
+
+Security takes precedence over convenience.
+
+---
+
+# 14. Design Rules
+
+Configuration modules must:
+
+* Remain independent of business logic
+* Avoid circular dependencies
+* Be fully type-safe
+* Support dependency injection
+* Expose immutable configuration objects
+
+---
+
+# 15. Extension Rules
+
+Future extensions may add:
+
+* Additional blockchains
+* Additional providers
+* Cloud secret managers
+* Configuration hot reload
+* Dynamic feature flags
+
+Existing public configuration interfaces should remain backward compatible.
+
+---
+
+# 16. Error Handling
+
+Configuration errors are classified as:
+
+* Missing configuration
+* Invalid configuration
+* Secret loading failure
+* RPC configuration failure
+* Environment mismatch
+
+Critical configuration errors prevent application startup.
+
+---
+
+# 17. Development Guidelines
+
+Developers must:
+
+* Add new settings through typed models.
+* Validate every new configuration field.
+* Document configuration changes.
+* Update environment templates.
+* Preserve backward compatibility whenever possible.
+
+---
+
+# 18. Dependencies
+
+Primary dependencies:
+
+* Pydantic v2
+* pydantic-settings
+* Python standard library
+
+No blockchain-specific business logic belongs in this module.
+
+---
+
+# 19. Future Evolution
+
+The framework is designed to support:
+
+* New blockchain ecosystems
+* New deployment environments
+* Secret management backends
+* Distributed configuration
+* Remote configuration providers
+
+Evolution should occur through extension rather than modification.
+
+---
+
+# 20. Configuration Framework Statement
+
+The Configuration Framework provides a secure, validated, modular, and extensible foundation for all runtime configuration within the A01 Blockchain Intelligence Agent. It ensures consistent behavior across environments, protects sensitive information, supports multi-chain blockchain operations, and establishes a single authoritative configuration source for the entire CIE-OS ecosystem.
+
+---
+
+**End of Configuration Framework README**

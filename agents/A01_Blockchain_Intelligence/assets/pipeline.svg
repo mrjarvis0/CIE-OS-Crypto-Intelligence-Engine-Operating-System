@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 620" width="980" height="620"
+     role="img" aria-label="A01 data pipeline: chain to decision">
+  <title>A01 Blockchain Intelligence — data pipeline</title>
+  <desc>
+    Capture flows left to right: RPC providers, sensors, ingestion, normalization,
+    storage. A token branch runs through contract event decoding. The read side
+    runs storage to skills, intelligence, decision and interfaces. Coverage and
+    the maturity gate constrain what may be claimed.
+  </desc>
+
+  <!-- Readable on light and dark backgrounds: the sheet paints its own ground
+       rather than inheriting the page's, and every label sits on that ground. -->
+  <defs>
+    <linearGradient id="sheet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b0d16"/>
+      <stop offset="100%" stop-color="#12141f"/>
+    </linearGradient>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b74a0"/>
+    </marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f0a83c"/>
+    </marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#59d6a0"/>
+    </marker>
+    <style>
+      .lbl   { font: 600 13px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #e7eaf6; }
+      .sub   { font: 400 10px ui-monospace, Consolas, monospace;            fill: #8d95b8; }
+      .cap   { font: 600 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #6b74a0;
+               letter-spacing: 1.1px; }
+      .note  { font: 400 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #9aa2c4; }
+      .warn  { font: 600 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #f0a83c; }
+      .ok    { font: 600 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #59d6a0; }
+      .box   { fill: #1a1d2e; stroke: #2f3450; stroke-width: 1.2; rx: 10; }
+      .boxt  { fill: #221e16; stroke: #6b5326; stroke-width: 1.2; rx: 10; }
+      .boxg  { fill: #16241f; stroke: #2c5a48; stroke-width: 1.2; rx: 10; }
+      .flow  { stroke: #6b74a0; stroke-width: 1.8; fill: none; }
+      .flowt { stroke: #f0a83c; stroke-width: 1.8; fill: none; stroke-dasharray: 5 3; }
+      .flowg { stroke: #59d6a0; stroke-width: 1.6; fill: none; stroke-dasharray: 2 3; }
+    </style>
+  </defs>
+
+  <rect width="980" height="620" fill="url(#sheet)"/>
+
+  <text x="34" y="40" class="lbl" style="font-size:17px">A01 Blockchain Intelligence — data pipeline</text>
+  <text x="34" y="59" class="note">Read-only by architecture: no keys, no signing, no write path to any chain.</text>
+
+  <!-- ================= CAPTURE ================= -->
+  <text x="34" y="98" class="cap">CAPTURE</text>
+
+  <rect class="box" x="34"  y="110" width="140" height="58"/>
+  <text x="48" y="134" class="lbl">RPC providers</text>
+  <text x="48" y="151" class="sub">blockchain/rpc</text>
+
+  <rect class="box" x="208" y="110" width="140" height="58"/>
+  <text x="222" y="134" class="lbl">sensors</text>
+  <text x="222" y="151" class="sub">7 EVM chains</text>
+
+  <rect class="box" x="382" y="110" width="140" height="58"/>
+  <text x="396" y="134" class="lbl">ingestion</text>
+  <text x="396" y="151" class="sub">reorg-safe, resumable</text>
+
+  <rect class="box" x="556" y="110" width="150" height="58"/>
+  <text x="570" y="134" class="lbl">normalization</text>
+  <text x="570" y="151" class="sub">refuses, never defaults</text>
+
+  <rect class="box" x="740" y="110" width="150" height="58"/>
+  <text x="754" y="134" class="lbl">database</text>
+  <text x="754" y="151" class="sub">system of record</text>
+
+  <path class="flow" d="M174,139 L204,139" marker-end="url(#a)"/>
+  <path class="flow" d="M348,139 L378,139" marker-end="url(#a)"/>
+  <path class="flow" d="M522,139 L552,139" marker-end="url(#a)"/>
+  <path class="flow" d="M706,139 L736,139" marker-end="url(#a)"/>
+
+  <!-- ================= TOKEN BRANCH ================= -->
+  <text x="34" y="222" class="cap" style="fill:#a1782f">TOKEN BRANCH</text>
+
+  <rect class="boxt" x="382" y="234" width="140" height="58"/>
+  <text x="396" y="258" class="lbl">event logs</text>
+  <text x="396" y="275" class="sub">eth_getLogs</text>
+
+  <rect class="boxt" x="556" y="234" width="150" height="58"/>
+  <text x="570" y="258" class="lbl">contracts/</text>
+  <text x="570" y="275" class="sub">ERC-20 · ERC-721</text>
+
+  <path class="flowt" d="M300,168 L300,263 L378,263" marker-end="url(#at)"/>
+  <path class="flowt" d="M522,263 L552,263" marker-end="url(#at)"/>
+  <path class="flowt" d="M706,263 L790,263 L790,172" marker-end="url(#at)"/>
+
+  <text x="34" y="258" class="warn">Same topic0</text>
+  <text x="34" y="274" class="note">for both standards;</text>
+  <text x="34" y="289" class="note">shape decides which.</text>
+
+  <text x="382" y="313" class="note">On L2 the largest native transfer is routinely 0.0000 — without this branch,</text>
+  <text x="382" y="329" class="note">a busy chain reads as an idle one.</text>
+
+  <!-- ================= READ SIDE ================= -->
+  <text x="34" y="380" class="cap">READ SIDE</text>
+
+  <rect class="box" x="34"  y="392" width="140" height="58"/>
+  <text x="48" y="416" class="lbl">skills</text>
+  <text x="48" y="433" class="sub">3 of 18 built</text>
+
+  <rect class="box" x="208" y="392" width="140" height="58"/>
+  <text x="222" y="416" class="lbl">intelligence</text>
+  <text x="222" y="433" class="sub">composes skills</text>
+
+  <rect class="box" x="382" y="392" width="140" height="58"/>
+  <text x="396" y="416" class="lbl">decision</text>
+  <text x="396" y="433" class="sub">what may be said</text>
+
+  <rect class="box" x="556" y="392" width="150" height="58"/>
+  <text x="570" y="416" class="lbl">interfaces</text>
+  <text x="570" y="433" class="sub">CLI · REST · dashboard</text>
+
+  <path class="flow" d="M815,168 L815,340 L104,340 L104,388" marker-end="url(#a)"/>
+  <path class="flow" d="M174,421 L204,421" marker-end="url(#a)"/>
+  <path class="flow" d="M348,421 L378,421" marker-end="url(#a)"/>
+  <path class="flow" d="M522,421 L552,421" marker-end="url(#a)"/>
+
+  <!-- ================= CONSTRAINTS ================= -->
+  <rect class="boxg" x="740" y="392" width="206" height="58"/>
+  <text x="754" y="416" class="lbl">narrative</text>
+  <text x="754" y="433" class="sub">grounded, no model needed</text>
+  <path class="flow" d="M706,421 L736,421" marker-end="url(#a)"/>
+
+  <text x="34" y="500" class="cap" style="fill:#3f7d63">WHAT CONSTRAINS A CLAIM</text>
+
+  <rect class="boxg" x="34"  y="512" width="290" height="72"/>
+  <text x="48" y="536" class="ok">Coverage</text>
+  <text x="48" y="554" class="note">A shallow window cannot support a negative.</text>
+  <text x="48" y="570" class="note">Below 3,600 blocks, "none found" → undetermined.</text>
+
+  <rect class="boxg" x="346" y="512" width="290" height="72"/>
+  <text x="360" y="536" class="ok">Maturity gate</text>
+  <text x="360" y="554" class="note">No measured error rate → capped at 0.60</text>
+  <text x="360" y="570" class="note">confidence, and no alert may fire.</text>
+
+  <rect class="boxg" x="658" y="512" width="288" height="72"/>
+  <text x="672" y="536" class="ok">Unresolved decimals</text>
+  <text x="672" y="554" class="note">Token amounts are raw base units —</text>
+  <text x="672" y="570" class="note">comparable within one token, never across.</text>
+
+  <path class="flowg" d="M179,508 L179,458"/>
+  <path class="flowg" d="M491,508 L491,458"/>
+  <path class="flowg" d="M802,508 L802,458"/>
+</svg>

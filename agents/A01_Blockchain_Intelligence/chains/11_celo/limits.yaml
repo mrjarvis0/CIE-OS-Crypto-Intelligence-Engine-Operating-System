@@ -1,0 +1,23 @@
+# Celo — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: celo
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: rollup
+reorg_depth: 20
+block_time_seconds: 1
+confirmations: 20
+
+limits:
+  - no archive endpoint on the free tier
+  - no keyed provider is catalogued
+  - token decimals are unresolved
+  - native transfers are routinely 0 here; real movement is in token logs
+  - one-second blocks, so 20 confirmations is twenty seconds of wall time
+    against Base's forty for the same depth
+
+measured_on: "2026-08-14"

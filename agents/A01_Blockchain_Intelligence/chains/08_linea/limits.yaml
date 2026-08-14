@@ -1,0 +1,25 @@
+# Linea — capabilities and limits
+# Source: knowledge/chains.py, measured 2026-08-14
+
+chain: linea
+chain_type: evm
+has_sensor: true
+supports_logs: true
+archive_available: false
+
+finality: rollup
+reorg_depth: 20
+block_time_seconds: 8  # measured 8.4s; demand-driven, not a constant
+confirmations: 20
+
+limits:
+  - no archive endpoint on the free tier
+  - no keyed provider is catalogued, so there is no archive upgrade path
+  - token decimals are unresolved
+  - native transfers are routinely 0 here; real movement is in token logs
+  - blocks are produced on demand — 8.4s measured over 500 blocks, not the
+    2s marketing suggests; the rate moves with activity
+  - safe and finalized return the same block, so there is no cheaper
+    intermediate read here
+
+measured_on: "2026-08-14"
