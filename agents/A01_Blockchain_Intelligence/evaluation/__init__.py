@@ -56,17 +56,32 @@ from .metrics import (
     calibration,
     confusion_matrix,
 )
+from .labelled import (
+    DETECTOR_CASES,
+    anomaly_cases,
+    dormant_cases,
+    exchange_flow_cases,
+    whale_cases,
+)
+from .runner import run_all, run_backtest
 
 __all__ = [
     "Backtest",
     "BacktestResult",
+    "DETECTOR_CASES",
     "LabelledCase",
-    "MIN_SAMPLE_SIZE",
     "MAX_CALIBRATION_ERROR",
+    "MIN_SAMPLE_SIZE",
     "CalibrationBin",
     "CalibrationReport",
     "ClassificationMetrics",
     "ConfusionMatrix",
+    "anomaly_cases",
     "calibration",
     "confusion_matrix",
+    "dormant_cases",
+    "exchange_flow_cases",
+    "run_all",
+    "run_backtest",
+    "whale_cases",
 ]
