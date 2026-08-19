@@ -148,6 +148,42 @@ class Sensor(ABC):
             reason=f"{self.name} does not implement log reads",
         )
 
+    def balance(self, address: str, *, block_tag: str = "latest") -> SensorResult:
+        """
+        Native balance of an address.
+
+        Declines by default. A sensor that cannot read balances reports the
+        gap rather than raising, so a caller that can degrade does.
+        """
+        return SensorResult(
+            determined=False,
+            chain=self.chain,
+            method="balance",
+            outcome="capability_unavailable",
+            reason=f"{self.name} does not implement balance reads",
+        )
+
+    def token_balance(
+        self,
+        address: str,
+        token: str,
+        *,
+        block_tag: str = "latest",
+    ) -> SensorResult:
+        """
+        ERC-20 token balance of an address.
+
+        Declines by default. The token's ``balanceOf(address)`` view
+        function is an ``eth_call``, and not every sensor can issue one.
+        """
+        return SensorResult(
+            determined=False,
+            chain=self.chain,
+            method="token_balance",
+            outcome="capability_unavailable",
+            reason=f"{self.name} does not implement token balance reads",
+        )
+
     def health(self) -> dict[str, Any]:
         """Operator-facing status. Overridden by sensors with a transport."""
         return {"sensor": self.name, "chain": self.chain, **self.capability().as_dict()}

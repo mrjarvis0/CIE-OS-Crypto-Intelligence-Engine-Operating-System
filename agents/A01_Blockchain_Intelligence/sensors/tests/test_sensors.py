@@ -454,3 +454,158 @@ def test_registered_sensor_overrides_the_built_one():
     registry.register(custom)
 
     assert registry.get("ethereum") is custom
+
+
+# ==============================================================================
+# NATIVE BALANCE
+# ==============================================================================
+
+def test_balance_returns_parsed_wei_with_provenance():
+    sensor = sensor_with({"eth_getBalance": "0xde0b6b3a7640000"})
+    result = sensor.balance("0x" + "ab" * 20)
+
+    assert result.ok
+    record = result.unwrap()
+    assert record.kind is RecordKind.BALANCE
+    assert record.payload["balance_wei"] == 10**18
+    assert record.payload["balance_raw"] == "0xde0b6b3a7640000"
+    assert record.payload["address"] == "0x" + "ab" * 20
+    assert record.provenance.provider == "scripted"
+
+
+def test_balance_zero_is_a_valid_answer():
+    """A zero balance is a finding, not a failure."""
+    sensor = sensor_with({"eth_getBalance": "0x0"})
+    result = sensor.balance("0x" + "ab" * 20)
+
+    assert result.ok
+    assert result.unwrap().payload["balance_wei"] == 0
+
+
+def test_balance_failure_is_undetermined_not_zero():
+    """A transport failure must not read as "the account has zero balance"."""
+    sensor = sensor_with({})
+    result = sensor.balance("0x" + "ab" * 20)
+
+    assert not result.determined
+    assert result.record is None
+
+
+def test_balance_malformed_response_is_undetermined():
+    sensor = sensor_with({"eth_getBalance": "not-a-quantity"})
+    result = sensor.balance("0x" + "ab" * 20)
+
+    assert not result.determined
+    assert result.outcome == "malformed_response"
+
+
+def test_balance_rejects_empty_address():
+    sensor = sensor_with({})
+    with pytest.raises(SensorError):
+        sensor.balance("")
+
+
+def test_balance_address_is_lowercased_in_payload():
+    mixed_case = "0xAbCdEf" + "12" * 17
+    sensor = sensor_with({"eth_getBalance": "0x64"})
+    result = sensor.balance(mixed_case)
+
+    assert result.ok
+    assert result.unwrap().payload["address"] == mixed_case.lower()
+
+
+def test_balance_height_is_none():
+    """Balance is a state query, not scoped to a specific block height."""
+    sensor = sensor_with({"eth_getBalance": "0x64"})
+    record = sensor.balance("0x" + "ab" * 20).unwrap()
+
+    assert record.height is None
+
+
+# ==============================================================================
+# TOKEN BALANCE
+# ==============================================================================
+
+USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+
+_ONE_ETH_HEX = "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+
+
+def test_token_balance_returns_parsed_amount():
+    sensor = sensor_with({"eth_call": _ONE_ETH_HEX})
+    result = sensor.token_balance("0x" + "ab" * 20, USDC)
+
+    assert result.ok
+    record = result.unwrap()
+    assert record.kind is RecordKind.BALANCE
+    assert record.payload["balance"] == 10**18
+    assert record.payload["token"] == USDC.lower()
+    assert record.payload["address"] == "0x" + "ab" * 20
+
+
+def test_token_balance_zero_is_valid():
+    zero_hex = "0x0000000000000000000000000000000000000000000000000000000000000000"
+    sensor = sensor_with({"eth_call": zero_hex})
+    result = sensor.token_balance("0x" + "ab" * 20, USDC)
+
+    assert result.ok
+    assert result.unwrap().payload["balance"] == 0
+
+
+def test_token_balance_failure_is_undetermined():
+    sensor = sensor_with({})
+    result = sensor.token_balance("0x" + "ab" * 20, USDC)
+
+    assert not result.determined
+
+
+def test_token_balance_malformed_response_is_undetermined():
+    sensor = sensor_with({"eth_call": "not-abi-encoded"})
+    result = sensor.token_balance("0x" + "ab" * 20, USDC)
+
+    assert not result.determined
+    assert result.outcome == "malformed_response"
+
+
+def test_token_balance_rejects_empty_address():
+    sensor = sensor_with({})
+    with pytest.raises(SensorError):
+        sensor.token_balance("", USDC)
+
+
+def test_token_balance_rejects_empty_token():
+    sensor = sensor_with({})
+    with pytest.raises(SensorError):
+        sensor.token_balance("0x" + "ab" * 20, "")
+
+
+def test_token_balance_sends_correct_calldata():
+    """The call must include balanceOf selector and the padded address."""
+    dispatcher = ScriptedDispatcher({"eth_call": _ONE_ETH_HEX})
+    sensor = EvmRpcSensor("ethereum", dispatcher=dispatcher)
+    sensor.token_balance("0x" + "ab" * 20, USDC)
+
+    chain, method, params = dispatcher.calls[-1]
+    assert method == "eth_call"
+    call_obj, block_tag = params[0], params[1]
+    assert call_obj["to"] == USDC
+    assert call_obj["data"].startswith("0x70a08231")
+    assert block_tag == "latest"
+
+
+# ==============================================================================
+# BASE SENSOR — BALANCE DEFAULTS
+# ==============================================================================
+
+def test_base_sensor_balance_declines_by_default():
+    result = MinimalSensor().balance("0x" + "ab" * 20)
+
+    assert not result.determined
+    assert result.outcome == "capability_unavailable"
+
+
+def test_base_sensor_token_balance_declines_by_default():
+    result = MinimalSensor().token_balance("0x" + "ab" * 20, USDC)
+
+    assert not result.determined
+    assert result.outcome == "capability_unavailable"

@@ -37,14 +37,32 @@ A decoder keyed on topic0 alone reads every NFT movement as a token transfer of
 
 Decimals
 --------
-Not resolved here. The exponent lives in the contract's `decimals()`, reachable
-only by `eth_call`, which this layer does not do. Assuming 18 renders 6-decimal
-USDC a trillion times too large and the figure looks ordinary. Raw integers are
-carried with the scale marked unknown, and consumers decide what they may say.
+Resolved by :mod:`contracts.decimals`.  The exponent lives in the contract's
+``decimals()`` view function, reachable only by ``eth_call``.  The event
+decoder still carries raw integers with ``decimals=0`` (scale unknown), but
+consumers can resolve the scale through :class:`TokenDecimalsResolver`, which
+checks a well-known table first, then an in-memory cache, then falls back to
+``eth_call``.  A contract that does not implement ``decimals()`` returns
+``None`` — never a default of 18, because assuming 18 renders 6-decimal USDC
+a trillion times too large and the figure looks ordinary.
 """
 
 from __future__ import annotations
 
+from .balances import (
+    BALANCE_OF_SELECTOR,
+    encode_balance_of_call,
+    parse_balance_of_response,
+    parse_balance_response,
+)
+from .decimals import (
+    DECIMALS_SELECTOR,
+    WELL_KNOWN,
+    DecimalsResult,
+    TokenDecimalsResolver,
+    encode_decimals_call,
+    parse_decimals_response,
+)
 from .events import DecodeRefusal, DecodedTransfer, decode_log, decode_logs
 from .signatures import (
     APPROVAL_FOR_ALL_TOPIC,
@@ -62,16 +80,26 @@ from .signatures import (
 __all__ = [
     "APPROVAL_FOR_ALL_TOPIC",
     "APPROVAL_TOPIC",
+    "BALANCE_OF_SELECTOR",
+    "DECIMALS_SELECTOR",
     "ERC1155_SINGLE_TOPIC",
     "KNOWN_SHAPES",
     "TRANSFER_TOPIC",
     "UNSUPPORTED_TOPICS",
+    "WELL_KNOWN",
+    "DecimalsResult",
     "DecodeRefusal",
     "DecodedTransfer",
     "EventKind",
     "EventShape",
+    "TokenDecimalsResolver",
     "decode_log",
     "decode_logs",
+    "encode_balance_of_call",
+    "encode_decimals_call",
+    "parse_balance_of_response",
+    "parse_balance_response",
+    "parse_decimals_response",
     "shape_for",
     "unsupported_reason",
 ]

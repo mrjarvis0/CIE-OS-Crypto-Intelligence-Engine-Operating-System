@@ -11,12 +11,15 @@ Enterprise-grade BaseAgent foundation for the CIE-OS platform.
 
 This module provides:
 
-- Shared constants
-- Common type aliases
-- Validation helpers
-- Runtime helper utilities
+- Shared constants and type aliases
+- Validation helpers and runtime utilities
+- Enums for capabilities, status, priority, health, execution mode
+- Configuration, identity, metadata, and statistics dataclasses
+- BaseAgent: the async-first base class that every CIE-OS agent inherits
 
-The actual BaseAgent implementation is added in later parts.
+Concrete agents (BlockchainAgent, WalletAnalyzer, MEVDetector, etc.)
+override ``execute()`` and register domain-specific tools, services,
+and event handlers.
 """
 
 from __future__ import annotations
@@ -26,10 +29,12 @@ from __future__ import annotations
 # =============================================================================
 
 import asyncio
+import logging
 import re
 import time
 import uuid
 
+from contextlib import suppress
 from datetime import UTC, datetime
 from enum import IntEnum, StrEnum
 from pathlib import Path
@@ -52,6 +57,12 @@ from dataclasses import (
 from .context import AgentContext
 from .runtime import AgentRuntime
 from .lifecycle import AgentLifecycle
+
+# =============================================================================
+# Logger
+# =============================================================================
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Type Aliases
@@ -119,57 +130,26 @@ AGENT_NAME_PATTERN: Final = re.compile(
 
 
 def utc_now() -> datetime:
-    """
-    Return current UTC timestamp.
-    """
     return datetime.now(UTC)
 
 
 def monotonic_ms() -> int:
-    """
-    High precision monotonic clock.
-
-    Useful for latency measurements.
-    """
     return int(time.perf_counter() * 1000)
 
 
 def generate_agent_id() -> AgentID:
-    """
-    Generate globally unique Agent ID.
-    """
     return AgentID(str(uuid.uuid4()))
 
 
 def generate_execution_id() -> ExecutionID:
-    """
-    Generate execution identifier.
-    """
     return ExecutionID(str(uuid.uuid4()))
 
 
 def generate_task_id() -> TaskID:
-    """
-    Generate task identifier.
-    """
     return TaskID(str(uuid.uuid4()))
 
 
 def validate_agent_name(name: str) -> str:
-    """
-    Validate agent name.
-
-    Rules
-    -----
-    - 3–64 characters
-    - Letters
-    - Numbers
-    - Space
-    - _
-    - -
-    - .
-    """
-
     name = name.strip()
 
     if not AGENT_NAME_PATTERN.fullmatch(name):
@@ -181,10 +161,6 @@ def validate_agent_name(name: str) -> str:
 
 
 def validate_version(version: str) -> str:
-    """
-    Validate semantic version.
-    """
-
     if not SEMVER_PATTERN.fullmatch(version):
         raise ValueError(
             f"Invalid version: {version}"
@@ -194,10 +170,6 @@ def validate_version(version: str) -> str:
 
 
 def ensure_directory(path: Path) -> Path:
-    """
-    Ensure directory exists.
-    """
-
     path.mkdir(
         parents=True,
         exist_ok=True,
@@ -209,113 +181,62 @@ def ensure_directory(path: Path) -> Path:
 def safe_metadata(
     metadata: Metadata | None,
 ) -> Metadata:
-    """
-    Return non-null metadata dictionary.
-    """
-
     return metadata or {}
 
 
 def is_async_callable(
     obj: Any,
 ) -> bool:
-    """
-    Determine whether object is awaitable.
-    """
-
     return (
         asyncio.iscoroutinefunction(obj)
         or asyncio.iscoroutine(obj)
     )
+
+
 # =============================================================================
 # Agent Capabilities
 # =============================================================================
 
 
 class AgentCapability(StrEnum):
-    """
-    Defines every capability that an Agent may expose.
 
-    These capabilities are intentionally generic so they can be
-    reused across all CIE-OS intelligence modules.
-    """
-
-    # ---------------------------------------------------------
     # Blockchain Intelligence
-    # ---------------------------------------------------------
-
     ANALYZE_TRANSACTIONS = "analyze_transactions"
-
     ANALYZE_WALLETS = "analyze_wallets"
-
     ANALYZE_CONTRACTS = "analyze_contracts"
-
     TOKEN_ANALYSIS = "token_analysis"
-
     NFT_ANALYSIS = "nft_analysis"
-
     DEFI_ANALYSIS = "defi_analysis"
-
     BRIDGE_ANALYSIS = "bridge_analysis"
-
     MEV_DETECTION = "mev_detection"
-
     GAS_ANALYSIS = "gas_analysis"
-
     RISK_SCORING = "risk_scoring"
-
     SCAM_DETECTION = "scam_detection"
-
     COMPLIANCE_ANALYSIS = "compliance_analysis"
 
-    # ---------------------------------------------------------
     # Intelligence
-    # ---------------------------------------------------------
-
     MARKET_INTELLIGENCE = "market_intelligence"
-
     SOCIAL_INTELLIGENCE = "social_intelligence"
-
     NEWS_INTELLIGENCE = "news_intelligence"
-
     ONCHAIN_INTELLIGENCE = "onchain_intelligence"
-
     SENTIMENT_ANALYSIS = "sentiment_analysis"
-
     ENTITY_RESOLUTION = "entity_resolution"
-
     KNOWLEDGE_GRAPH = "knowledge_graph"
 
-    # ---------------------------------------------------------
     # AI
-    # ---------------------------------------------------------
-
     TOOL_EXECUTION = "tool_execution"
-
     MEMORY = "memory"
-
     REASONING = "reasoning"
-
     PLANNING = "planning"
-
     AUTONOMOUS_EXECUTION = "autonomous_execution"
-
     MULTI_AGENT = "multi_agent"
-
     HUMAN_APPROVAL = "human_approval"
 
-    # ---------------------------------------------------------
     # Infrastructure
-    # ---------------------------------------------------------
-
     EVENT_PROCESSING = "event_processing"
-
     STATE_SYNCHRONIZATION = "state_synchronization"
-
     AUDIT_LOGGING = "audit_logging"
-
     OBSERVABILITY = "observability"
-
     HEALTH_MONITORING = "health_monitoring"
 
 
@@ -325,34 +246,19 @@ class AgentCapability(StrEnum):
 
 
 class AgentStatus(StrEnum):
-    """
-    High-level runtime state.
-    """
 
     CREATED = "created"
-
     INITIALIZING = "initializing"
-
     READY = "ready"
-
     IDLE = "idle"
-
     RUNNING = "running"
-
     BUSY = "busy"
-
     WAITING = "waiting"
-
     PAUSED = "paused"
-
     RECOVERING = "recovering"
-
     STOPPING = "stopping"
-
     STOPPED = "stopped"
-
     FAILED = "failed"
-
     SHUTDOWN = "shutdown"
 
 
@@ -362,20 +268,11 @@ class AgentStatus(StrEnum):
 
 
 class AgentPriority(IntEnum):
-    """
-    Scheduling priority.
-
-    Higher values receive execution preference.
-    """
 
     BACKGROUND = 0
-
     LOW = 25
-
     NORMAL = 50
-
     HIGH = 75
-
     CRITICAL = 100
 
 
@@ -385,20 +282,12 @@ class AgentPriority(IntEnum):
 
 
 class ExecutionMode(StrEnum):
-    """
-    Determines how the agent executes work.
-    """
 
     MANUAL = "manual"
-
     INTERACTIVE = "interactive"
-
     SCHEDULED = "scheduled"
-
     EVENT_DRIVEN = "event_driven"
-
     STREAMING = "streaming"
-
     AUTONOMOUS = "autonomous"
 
 
@@ -408,20 +297,12 @@ class ExecutionMode(StrEnum):
 
 
 class HealthStatus(StrEnum):
-    """
-    Agent health classification.
-    """
 
     UNKNOWN = "unknown"
-
     HEALTHY = "healthy"
-
     DEGRADED = "degraded"
-
     UNAVAILABLE = "unavailable"
-
     MAINTENANCE = "maintenance"
-
     FAILED = "failed"
 
 
@@ -431,16 +312,10 @@ class HealthStatus(StrEnum):
 
 
 class RestartPolicy(StrEnum):
-    """
-    Automatic restart behavior.
-    """
 
     NEVER = "never"
-
     ON_FAILURE = "on_failure"
-
     ALWAYS = "always"
-
     EXPONENTIAL_BACKOFF = "exponential_backoff"
 
 
@@ -450,46 +325,30 @@ class RestartPolicy(StrEnum):
 
 
 class AuditSeverity(StrEnum):
-    """
-    Severity level for audit events.
-    """
 
     DEBUG = "debug"
-
     INFO = "info"
-
     WARNING = "warning"
-
     ERROR = "error"
-
     CRITICAL = "critical"
-    # =============================================================================
+
+
+# =============================================================================
 # Supported Chain
 # =============================================================================
 
 
 @dataclass(slots=True)
 class SupportedChain:
-    """
-    Describes a blockchain network supported by an agent.
-    """
 
     chain_id: int
-
     name: str
-
     symbol: str
-
     ecosystem: str
-
     rpc_provider: str = ""
-
     explorer_url: str = ""
-
     native_currency: str = ""
-
     enabled: bool = True
-
     metadata: Metadata = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -504,24 +363,11 @@ class SupportedChain:
 
 @dataclass(slots=True)
 class SupportedProtocol:
-    """
-    Protocol supported by the agent.
-
-    Examples:
-        - Uniswap
-        - Aave
-        - Curve
-        - LayerZero
-    """
 
     name: str
-
     category: str
-
     version: str = "1.0"
-
     enabled: bool = True
-
     metadata: Metadata = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -535,28 +381,16 @@ class SupportedProtocol:
 
 @dataclass(slots=True)
 class AgentMetadata:
-    """
-    Descriptive information about the agent.
-    """
 
     author: str = "CIE-OS"
-
     organization: str = "CIE"
-
     repository: str = ""
-
     documentation: str = ""
-
     license: str = "MIT"
-
     description: str = DEFAULT_DESCRIPTION
-
     created_at: datetime = field(default_factory=utc_now)
-
     updated_at: datetime = field(default_factory=utc_now)
-
     tags: list[str] = field(default_factory=list)
-
     metadata: Metadata = field(default_factory=dict)
 
 
@@ -567,28 +401,18 @@ class AgentMetadata:
 
 @dataclass(slots=True)
 class AgentIdentity:
-    """
-    Immutable identity of an agent instance.
-    """
 
     agent_id: AgentID = field(default_factory=generate_agent_id)
-
     name: str = "Blockchain Intelligence Agent"
-
     version: str = DEFAULT_AGENT_VERSION
-
     vendor: str = "CIE-OS"
-
     instance_id: str = field(
         default_factory=lambda: str(uuid.uuid4())
     )
-
     created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
-
         self.name = validate_agent_name(self.name)
-
         self.version = validate_version(self.version)
 
 
@@ -599,54 +423,34 @@ class AgentIdentity:
 
 @dataclass(slots=True)
 class AgentConfig:
-    """
-    Primary configuration object used by BaseAgent.
-    """
 
     identity: AgentIdentity = field(
         default_factory=AgentIdentity
     )
-
     metadata: AgentMetadata = field(
         default_factory=AgentMetadata
     )
-
     enabled: bool = True
-
     priority: AgentPriority = AgentPriority.NORMAL
-
     execution_mode: ExecutionMode = (
         ExecutionMode.INTERACTIVE
     )
-
     restart_policy: RestartPolicy = (
         RestartPolicy.ON_FAILURE
     )
-
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
-
-    heartbeat_seconds: int = (
-        DEFAULT_HEARTBEAT_SECONDS
-    )
-
+    heartbeat_seconds: int = DEFAULT_HEARTBEAT_SECONDS
     retry_limit: int = DEFAULT_RETRY_LIMIT
-
-    max_concurrent_tasks: int = (
-        DEFAULT_MAX_CONCURRENT_TASKS
-    )
-
+    max_concurrent_tasks: int = DEFAULT_MAX_CONCURRENT_TASKS
     capabilities: set[AgentCapability] = field(
         default_factory=set
     )
-
     supported_chains: list[SupportedChain] = field(
         default_factory=list
     )
-
-    supported_protocols: list[
-        SupportedProtocol
-    ] = field(default_factory=list)
-
+    supported_protocols: list[SupportedProtocol] = field(
+        default_factory=list
+    )
     metadata_extra: Metadata = field(
         default_factory=dict
     )
@@ -682,44 +486,29 @@ class AgentConfig:
     @property
     def protocol_count(self) -> int:
         return len(self.supported_protocols)
-    # =============================================================================
+
+
+# =============================================================================
 # Agent Statistics
 # =============================================================================
 
 
 @dataclass(slots=True)
 class AgentStatistics:
-    """
-    Runtime statistics collected throughout the lifetime
-    of an agent instance.
-    """
 
     started_at: datetime = field(default_factory=utc_now)
-
     last_activity: datetime = field(default_factory=utc_now)
-
     uptime_seconds: float = 0.0
-
     total_executions: int = 0
-
     successful_executions: int = 0
-
     failed_executions: int = 0
-
     tool_calls: int = 0
-
     rpc_calls: int = 0
-
     memory_reads: int = 0
-
     memory_writes: int = 0
-
     state_updates: int = 0
-
     events_published: int = 0
-
     average_latency_ms: float = 0.0
-
     peak_latency_ms: float = 0.0
 
     def update_uptime(self) -> None:
@@ -729,7 +518,6 @@ class AgentStatistics:
 
     @property
     def success_rate(self) -> float:
-
         if self.total_executions == 0:
             return 0.0
 
@@ -746,30 +534,17 @@ class AgentStatistics:
 
 @dataclass(slots=True)
 class AgentHealth:
-    """
-    Current operational health.
-    """
 
     status: HealthStatus = HealthStatus.UNKNOWN
-
     message: str = ""
-
     checked_at: datetime = field(default_factory=utc_now)
-
     cpu_percent: float = 0.0
-
     memory_mb: float = 0.0
-
     active_tasks: int = 0
-
     rpc_connected: bool = False
-
     memory_available: bool = False
-
     state_manager_available: bool = False
-
     event_bus_available: bool = False
-
     metadata: Metadata = field(default_factory=dict)
 
     @property
@@ -784,30 +559,20 @@ class AgentHealth:
 
 @dataclass(slots=True)
 class AgentExecutionContext:
-    """
-    Information describing the current execution.
-    """
 
     execution_id: ExecutionID = field(
         default_factory=generate_execution_id
     )
-
     task_id: TaskID = field(
         default_factory=generate_task_id
     )
-
     started_at: datetime = field(
         default_factory=utc_now
     )
-
     user_id: str | None = None
-
     session_id: str | None = None
-
     trace_id: str | None = None
-
     parent_execution: ExecutionID | None = None
-
     metadata: Metadata = field(default_factory=dict)
 
 
@@ -818,42 +583,31 @@ class AgentExecutionContext:
 
 @dataclass(slots=True)
 class AgentHooks:
-    """
-    Lifecycle callback registry.
-    """
 
     before_initialize: list[Any] = field(
         default_factory=list
     )
-
     after_initialize: list[Any] = field(
         default_factory=list
     )
-
     before_execute: list[Any] = field(
         default_factory=list
     )
-
     after_execute: list[Any] = field(
         default_factory=list
     )
-
     before_shutdown: list[Any] = field(
         default_factory=list
     )
-
     after_shutdown: list[Any] = field(
         default_factory=list
     )
-
     on_error: list[Any] = field(
         default_factory=list
     )
-
     on_health_change: list[Any] = field(
         default_factory=list
     )
-
     on_state_change: list[Any] = field(
         default_factory=list
     )
@@ -866,61 +620,18 @@ class AgentHooks:
 
 @dataclass(slots=True)
 class AgentSnapshot:
-    """
-    Immutable snapshot of the current runtime state.
-    """
 
     identity: AgentIdentity
-
     status: AgentStatus
-
     health: AgentHealth
-
     statistics: AgentStatistics
-
     created_at: datetime = field(
         default_factory=utc_now
     )
-
     metadata: Metadata = field(default_factory=dict)
 
 
 # =============================================================================
-# Public Exports
-# =============================================================================
-
-__all__ = [
-
-    # Agent
-    "BaseAgent",
-
-    # Configuration
-    "AgentConfig",
-    "AgentIdentity",
-    "AgentMetadata",
-
-    # Runtime
-    "AgentStatistics",
-    "AgentHealth",
-    "AgentExecutionContext",
-    "AgentHooks",
-    "AgentSnapshot",
-
-    # Enums
-    "AgentCapability",
-    "AgentPriority",
-    "AgentStatus",
-    "ExecutionMode",
-    "HealthStatus",
-    "RestartPolicy",
-    "AuditSeverity",
-
-    # Helpers
-    "generate_agent_id",
-    "generate_execution_id",
-    "generate_task_id",
-    "utc_now",
-]# =============================================================================
 # Base Agent
 # =============================================================================
 
@@ -929,11 +640,8 @@ class BaseAgent:
     """
     Enterprise-grade base class for every CIE-OS agent.
 
-    This class provides the common infrastructure required by all
-    intelligence agents while remaining completely domain-agnostic.
-
-    Concrete implementations should inherit from this class instead
-    of implementing their own runtime infrastructure.
+    Concrete implementations override ``execute()`` and register
+    domain-specific tools, services, and event handlers.
 
     Examples
     --------
@@ -941,8 +649,6 @@ class BaseAgent:
         WalletAnalyzer(BaseAgent)
         SmartContractAnalyzer(BaseAgent)
         MEVDetector(BaseAgent)
-        ForexAgent(BaseAgent)
-        StockAgent(BaseAgent)
     """
 
     def __init__(
@@ -953,23 +659,6 @@ class BaseAgent:
         context: AgentContext | None = None,
         lifecycle: AgentLifecycle | None = None,
     ) -> None:
-        """
-        Create a new BaseAgent instance.
-
-        Parameters
-        ----------
-        config
-            Agent configuration.
-
-        runtime
-            Existing runtime instance.
-
-        context
-            Existing shared context.
-
-        lifecycle
-            Existing lifecycle manager.
-        """
 
         # ==========================================================
         # Core Configuration
@@ -1030,13 +719,9 @@ class BaseAgent:
         # ==========================================================
 
         self._initialized = False
-
         self._running = False
-
         self._paused = False
-
         self._shutdown = False
-
         self._failed = False
 
         # ==========================================================
@@ -1044,7 +729,6 @@ class BaseAgent:
         # ==========================================================
 
         self._created_at = utc_now()
-
         self._last_activity = utc_now()
 
         # ==========================================================
@@ -1052,7 +736,6 @@ class BaseAgent:
         # ==========================================================
 
         self._instance_id = str(uuid.uuid4())
-
         self._boot_id = str(uuid.uuid4())
 
         # ==========================================================
@@ -1060,10 +743,101 @@ class BaseAgent:
         # ==========================================================
 
         self._metadata: Metadata = {}
-
         self._tags: set[str] = set()
-
         self._labels: dict[str, str] = {}
+
+        # ==========================================================
+        # Internal Registries
+        # ==========================================================
+
+        self._tools: dict[str, Any] = {}
+        self._services: dict[str, Any] = {}
+        self._memories: dict[str, Any] = {}
+        self._contracts: dict[str, Any] = {}
+        self._state_managers: dict[str, Any] = {}
+        self._plugins: dict[str, Any] = {}
+        self._models: dict[str, Any] = {}
+        self._chains: dict[str, SupportedChain] = {}
+        self._protocols: dict[str, SupportedProtocol] = {}
+        self._event_handlers: dict[str, list[Any]] = {}
+        self._middleware: list[Any] = []
+        self._resources: dict[str, Any] = {}
+        self._extensions: dict[str, Any] = {}
+        self._shared_objects: dict[str, Any] = {}
+
+        # ==========================================================
+        # Runtime Collections
+        # ==========================================================
+
+        self._tasks: set[asyncio.Task[Any]] = set()
+        self._pending_jobs: list[Any] = []
+        self._completed_jobs: list[Any] = []
+        self._failed_jobs: list[Any] = []
+        self._notifications: list[Any] = []
+        self._warnings: list[str] = []
+        self._errors: list[Exception] = []
+
+        # ==========================================================
+        # Async Infrastructure
+        # ==========================================================
+
+        self._agent_lock = asyncio.Lock()
+        self._execution_lock = asyncio.Lock()
+        self._memory_lock = asyncio.Lock()
+        self._state_lock = asyncio.Lock()
+        self._event_lock = asyncio.Lock()
+        self._shutdown_event = asyncio.Event()
+        self._startup_event = asyncio.Event()
+        self._pause_event = asyncio.Event()
+        self._resume_event = asyncio.Event()
+
+        # ==========================================================
+        # Internal Queues
+        # ==========================================================
+
+        self._event_queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._task_queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._tool_queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._rpc_queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._audit_queue: asyncio.Queue[Any] = asyncio.Queue()
+
+        # ==========================================================
+        # Runtime Cache
+        # ==========================================================
+
+        self._cache: dict[str, Any] = {}
+        self._temporary_storage: dict[str, Any] = {}
+        self._execution_cache: dict[str, Any] = {}
+        self._result_cache: dict[str, Any] = {}
+        self._metrics_cache: dict[str, Any] = {}
+
+        # ==========================================================
+        # Background Workers
+        # ==========================================================
+
+        self._background_workers: dict[str, asyncio.Task[Any]] = {}
+        self._worker_states: dict[str, bool] = {}
+        self._worker_metadata: dict[str, Metadata] = {}
+
+        # ==========================================================
+        # Dependency Injection Container
+        # ==========================================================
+
+        self._container: dict[str, Any] = {}
+        self._singletons: dict[str, Any] = {}
+        self._factories: dict[str, Any] = {}
+        self._providers: dict[str, Any] = {}
+
+        # ==========================================================
+        # Runtime Diagnostics
+        # ==========================================================
+
+        self._diagnostics: dict[str, Any] = {}
+        self._audit_log: list[dict[str, Any]] = []
+        self._startup_duration_ms: float = 0.0
+        self._last_exception: Exception | None = None
+        self._last_health_check = utc_now()
+        self._last_snapshot = utc_now()
 
         # ==========================================================
         # Validation
@@ -1071,17 +845,27 @@ class BaseAgent:
 
         self._validate_configuration()
 
-    # ------------------------------------------------------------------
+    # =================================================================
+    # Async Context Manager
+    # =================================================================
+
+    async def __aenter__(self) -> "BaseAgent":
+        await self.start()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        await self.shutdown()
+
+    # =================================================================
     # Internal Validation
-    # ------------------------------------------------------------------
+    # =================================================================
 
     def _validate_configuration(self) -> None:
-        """
-        Validate configuration before runtime startup.
-
-        Additional enterprise validation will be added
-        in later parts.
-        """
 
         if not self.config.enabled:
             raise RuntimeError(
@@ -1094,178 +878,17 @@ class BaseAgent:
 
         validate_version(
             self.identity.version,
-        )# ==========================================================
-# Internal Registries
-# ==========================================================
-
-        #
-        # Every subsystem is registered here.
-        # Future modules can simply register themselves
-        # without modifying BaseAgent.
-        #
-
-        self._tools: dict[str, Any] = {}
-
-        self._services: dict[str, Any] = {}
-
-        self._memories: dict[str, Any] = {}
-
-        self._contracts: dict[str, Any] = {}
-
-        self._state_managers: dict[str, Any] = {}
-
-        self._plugins: dict[str, Any] = {}
-
-        self._models: dict[str, Any] = {}
-
-        self._chains: dict[str, SupportedChain] = {}
-
-        self._protocols: dict[str, SupportedProtocol] = {}
-
-        self._event_handlers: dict[
-            str,
-            list[Any],
-        ] = {}
-
-        self._middleware: list[Any] = []
-
-        self._resources: dict[str, Any] = {}
-
-        self._extensions: dict[str, Any] = {}
-
-        self._shared_objects: dict[str, Any] = {}
-
-        # ==========================================================
-        # Runtime Collections
-        # ==========================================================
-
-        self._tasks: set[asyncio.Task[Any]] = set()
-
-        self._pending_jobs: list[Any] = []
-
-        self._completed_jobs: list[Any] = []
-
-        self._failed_jobs: list[Any] = []
-
-        self._notifications: list[Any] = []
-
-        self._warnings: list[str] = []
-
-        self._errors: list[Exception] = []
-
-        # ==========================================================
-        # Async Infrastructure
-        # ==========================================================
-
-        self._agent_lock = asyncio.Lock()
-
-        self._execution_lock = asyncio.Lock()
-
-        self._memory_lock = asyncio.Lock()
-
-        self._state_lock = asyncio.Lock()
-
-        self._event_lock = asyncio.Lock()
-
-        self._shutdown_event = asyncio.Event()
-
-        self._startup_event = asyncio.Event()
-
-        self._pause_event = asyncio.Event()
-
-        self._resume_event = asyncio.Event()
-
-        # ==========================================================
-        # Internal Queues
-        # ==========================================================
-
-        self._event_queue: asyncio.Queue[Any] = (
-            asyncio.Queue()
         )
 
-        self._task_queue: asyncio.Queue[Any] = (
-            asyncio.Queue()
-        )
-
-        self._tool_queue: asyncio.Queue[Any] = (
-            asyncio.Queue()
-        )
-
-        self._rpc_queue: asyncio.Queue[Any] = (
-            asyncio.Queue()
-        )
-
-        self._audit_queue: asyncio.Queue[Any] = (
-            asyncio.Queue()
-        )
-
-        # ==========================================================
-        # Runtime Cache
-        # ==========================================================
-
-        self._cache: dict[str, Any] = {}
-
-        self._temporary_storage: dict[str, Any] = {}
-
-        self._execution_cache: dict[str, Any] = {}
-
-        self._result_cache: dict[str, Any] = {}
-
-        self._metrics_cache: dict[str, Any] = {}
-
-        # ==========================================================
-        # Background Workers
-        # ==========================================================
-
-        self._background_workers: dict[
-            str,
-            asyncio.Task[Any],
-        ] = {}
-
-        self._worker_states: dict[str, bool] = {}
-
-        self._worker_metadata: dict[
-            str,
-            Metadata,
-        ] = {}
-
-        # ==========================================================
-        # Dependency Injection Container
-        # ==========================================================
-
-        self._container: dict[str, Any] = {}
-
-        self._singletons: dict[str, Any] = {}
-
-        self._factories: dict[str, Any] = {}
-
-        self._providers: dict[str, Any] = {}
-
-        # ==========================================================
-        # Runtime Diagnostics
-        # ==========================================================
-
-        self._diagnostics: dict[str, Any] = {}
-
-        self._audit_log: list[dict[str, Any]] = []
-
-        self._startup_duration_ms: float = 0.0
-
-        self._last_exception: Exception | None = None
-
-        self._last_health_check = utc_now()
-
-        self._last_snapshot = utc_now()
-        # =============================================================================
-# Agent Lifecycle
-# =============================================================================
+    # =================================================================
+    # Agent Lifecycle
+    # =================================================================
 
     async def initialize(self) -> None:
         """
         Initialize the complete agent.
 
-        Initialization order is important:
-
+        Initialization order:
             1. Validate configuration
             2. Runtime
             3. Context
@@ -1282,7 +905,11 @@ class BaseAgent:
             if self._initialized:
                 return
 
+            boot_start = monotonic_ms()
+
             self.status = AgentStatus.INITIALIZING
+
+            await self.lifecycle.initialize()
 
             self.statistics.last_activity = utc_now()
 
@@ -1300,26 +927,25 @@ class BaseAgent:
 
             await self._run_initialize_hooks()
 
+            await self.lifecycle.ready()
+
             self.status = AgentStatus.READY
 
             self.health.status = HealthStatus.HEALTHY
 
             self._initialized = True
 
+            self._startup_duration_ms = (
+                monotonic_ms() - boot_start
+            )
+
             self._diagnostics["boot_completed"] = True
 
-
-# =============================================================================
-# Runtime Startup
-# =============================================================================
+            self._startup_event.set()
 
     async def start(self) -> None:
-        """
-        Start the agent runtime.
-        """
 
         if not self._initialized:
-
             await self.initialize()
 
         if self._running:
@@ -1327,24 +953,22 @@ class BaseAgent:
 
         await self.runtime.start()
 
+        await self.lifecycle.start()
+
         self.status = AgentStatus.RUNNING
 
         self._running = True
 
         self.statistics.last_activity = utc_now()
 
-
-# =============================================================================
-# Pause / Resume
-# =============================================================================
+        self._audit("agent_started")
 
     async def pause(self) -> None:
-        """
-        Pause execution.
-        """
 
-        if not self._running:
+        if not self._running or self._paused:
             return
+
+        await self.lifecycle.pause()
 
         self._paused = True
 
@@ -1352,14 +976,14 @@ class BaseAgent:
 
         self._pause_event.set()
 
+        self._audit("agent_paused")
 
     async def resume(self) -> None:
-        """
-        Resume execution.
-        """
 
         if not self._paused:
             return
+
+        await self.lifecycle.resume()
 
         self._paused = False
 
@@ -1367,36 +991,30 @@ class BaseAgent:
 
         self._resume_event.set()
 
-
-# =============================================================================
-# Stop
-# =============================================================================
+        self._audit("agent_resumed")
 
     async def stop(self) -> None:
-        """
-        Stop agent execution.
-        """
 
         if not self._running:
             return
 
         self.status = AgentStatus.STOPPING
 
+        await self._stop_workers()
+
         await self.runtime.stop()
+
+        await self.lifecycle.stop()
 
         self._running = False
 
+        self._paused = False
+
         self.status = AgentStatus.STOPPED
 
-
-# =============================================================================
-# Shutdown
-# =============================================================================
+        self._audit("agent_stopped")
 
     async def shutdown(self) -> None:
-        """
-        Gracefully shutdown the agent.
-        """
 
         if self._shutdown:
             return
@@ -1405,145 +1023,113 @@ class BaseAgent:
 
         await self._run_shutdown_hooks()
 
+        await self.cleanup()
+
         await self.runtime.shutdown()
+
+        await self.lifecycle.shutdown()
 
         self.status = AgentStatus.SHUTDOWN
 
         self._shutdown = True
 
+        self._shutdown_event.set()
 
-# =============================================================================
-# Internal Bootstrap
-# =============================================================================
+        self._audit("agent_shutdown")
+
+    # =================================================================
+    # Internal Bootstrap
+    # =================================================================
 
     async def _initialize_runtime(self) -> None:
-        """
-        Runtime initialization.
-        """
-
         await self.runtime.initialize()
 
-
     async def _initialize_services(self) -> None:
-        """
-        Initialize registered services.
-        """
-
         for service in self._services.values():
-
             initialize = getattr(
-                service,
-                "initialize",
-                None,
+                service, "initialize", None,
             )
-
             if initialize is None:
                 continue
-
             result = initialize()
-
             if asyncio.iscoroutine(result):
                 await result
-
 
     async def _initialize_memories(self) -> None:
-        """
-        Initialize memory providers.
-        """
-
         for memory in self._memories.values():
-
             initialize = getattr(
-                memory,
-                "initialize",
-                None,
+                memory, "initialize", None,
             )
-
             if initialize:
-
                 result = initialize()
-
                 if asyncio.iscoroutine(result):
                     await result
-
 
     async def _initialize_contracts(self) -> None:
-        """
-        Initialize contract wrappers.
-        """
-
         for contract in self._contracts.values():
-
             initialize = getattr(
-                contract,
-                "initialize",
-                None,
+                contract, "initialize", None,
             )
-
             if initialize:
-
                 result = initialize()
-
                 if asyncio.iscoroutine(result):
                     await result
-
 
     async def _initialize_state_managers(self) -> None:
-        """
-        Initialize state managers.
-        """
-
         for manager in self._state_managers.values():
-
             initialize = getattr(
-                manager,
-                "initialize",
-                None,
+                manager, "initialize", None,
             )
-
             if initialize:
-
                 result = initialize()
-
                 if asyncio.iscoroutine(result):
                     await result
 
-
     async def _initialize_event_handlers(self) -> None:
-        """
-        Placeholder.
+        for name, handlers in self._event_handlers.items():
+            for handler in handlers:
+                initialize = getattr(
+                    handler, "initialize", None,
+                )
+                if initialize:
+                    result = initialize()
+                    if asyncio.iscoroutine(result):
+                        await result
 
-        EventBus integration arrives later.
-        """
-
-        return
-
-
-# =============================================================================
-# Hook Execution
-# =============================================================================
+    # =================================================================
+    # Hook Execution
+    # =================================================================
 
     async def _run_initialize_hooks(self) -> None:
-
         for hook in self.hooks.after_initialize:
-
             result = hook(self)
-
             if asyncio.iscoroutine(result):
                 await result
-
 
     async def _run_shutdown_hooks(self) -> None:
-
         for hook in self.hooks.before_shutdown:
-
             result = hook(self)
-
             if asyncio.iscoroutine(result):
                 await result
-                # =============================================================================
-# Execution Engine
-# =============================================================================
+
+    async def _run_before_execute_hooks(self) -> None:
+        for hook in self.hooks.before_execute:
+            result = hook(self)
+            if asyncio.iscoroutine(result):
+                await result
+
+    async def _run_after_execute_hooks(
+        self,
+        result: Any,
+    ) -> None:
+        for hook in self.hooks.after_execute:
+            response = hook(self, result)
+            if asyncio.iscoroutine(response):
+                await response
+
+    # =================================================================
+    # Execution Engine
+    # =================================================================
 
     async def run(
         self,
@@ -1553,77 +1139,37 @@ class BaseAgent:
         """
         Main public execution entrypoint.
 
-        Every request entering the agent passes through this method.
-
-        Pipeline
-
-            Request
-                │
-                ▼
-            Validation
-                │
-                ▼
-            Execution Context
-                │
-                ▼
-            before_execute hooks
-                │
-                ▼
-            execute()
-                │
-                ▼
-            after_execute hooks
-                │
-                ▼
-            Metrics
-                │
-                ▼
-            Response
+        Pipeline: Request -> Validation -> Context ->
+        before_execute -> middleware -> execute() ->
+        after_execute -> Metrics -> Response
         """
 
         if not self._running:
             await self.start()
 
-        return await self.invoke(
-            task,
-            **kwargs,
-        )
-
-
-# =============================================================================
-# Invoke
-# =============================================================================
+        return await self.invoke(task, **kwargs)
 
     async def invoke(
         self,
         task: Any,
         **kwargs: Any,
     ) -> Any:
-        """
-        Creates an execution context
-        before delegating work.
-        """
 
         self.execution = AgentExecutionContext()
 
         self.statistics.total_executions += 1
-
         self.statistics.last_activity = utc_now()
 
         started = monotonic_ms()
 
         try:
-
             await self._run_before_execute_hooks()
 
-            result = await self.execute(
-                task,
-                **kwargs,
+            result = await self._run_middleware(
+                task, **kwargs,
             )
 
-            await self._run_after_execute_hooks(
-                result,
-            )
+            await self._run_after_execute_hooks(result)
 
             self.statistics.successful_executions += 1
 
@@ -1632,27 +1178,41 @@ class BaseAgent:
         except Exception as exc:
 
             self.statistics.failed_executions += 1
-
             self._last_exception = exc
+            self._errors.append(exc)
 
-            await self._handle_execution_error(
-                exc,
-            )
+            await self._handle_execution_error(exc)
 
             raise
 
         finally:
-
             elapsed = monotonic_ms() - started
+            self._update_latency(elapsed)
 
-            self._update_latency(
-                elapsed,
-            )
+    async def _run_middleware(
+        self,
+        task: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Execute the middleware pipeline, with ``execute()``
+        as the terminal handler.
+        """
 
+        if not self._middleware:
+            return await self.execute(task, **kwargs)
 
-# =============================================================================
-# Execute
-# =============================================================================
+        index = 0
+
+        async def next_handler(t: Any, **kw: Any) -> Any:
+            nonlocal index
+            if index < len(self._middleware):
+                mw = self._middleware[index]
+                index += 1
+                return await mw(t, next_handler, **kw)
+            return await self.execute(t, **kw)
+
+        return await next_handler(task, **kwargs)
 
     async def execute(
         self,
@@ -1660,62 +1220,15 @@ class BaseAgent:
         **kwargs: Any,
     ) -> Any:
         """
-        Main execution method.
-
-        Child classes MUST override this.
-
-        Examples
-
-            WalletAnalyzer.execute()
-
-            TokenAnalyzer.execute()
-
-            SmartContractAnalyzer.execute()
-
-            MEVDetector.execute()
+        Main execution method. Child classes MUST override this.
         """
-
         raise NotImplementedError(
-            "BaseAgent.execute() "
-            "must be implemented."
+            "BaseAgent.execute() must be implemented."
         )
 
-
-# =============================================================================
-# Hook Execution
-# =============================================================================
-
-    async def _run_before_execute_hooks(
-        self,
-    ) -> None:
-
-        for hook in self.hooks.before_execute:
-
-            result = hook(self)
-
-            if asyncio.iscoroutine(result):
-                await result
-
-
-    async def _run_after_execute_hooks(
-        self,
-        result: Any,
-    ) -> None:
-
-        for hook in self.hooks.after_execute:
-
-            response = hook(
-                self,
-                result,
-            )
-
-            if asyncio.iscoroutine(response):
-                await response
-
-
-# =============================================================================
-# Metrics
-# =============================================================================
+    # =================================================================
+    # Metrics
+    # =================================================================
 
     def _update_latency(
         self,
@@ -1723,7 +1236,6 @@ class BaseAgent:
     ) -> None:
 
         stats = self.statistics
-
         total = stats.total_executions
 
         if latency_ms > stats.peak_latency_ms:
@@ -1739,22 +1251,16 @@ class BaseAgent:
 
         stats.update_uptime()
 
-
-# =============================================================================
-# Error Handling
-# =============================================================================
+    # =================================================================
+    # Error Handling
+    # =================================================================
 
     async def _handle_execution_error(
         self,
         exc: Exception,
     ) -> None:
-        """
-        Default execution error handler.
-        """
 
-        self.health.status = (
-            HealthStatus.DEGRADED
-        )
+        self.health.status = HealthStatus.DEGRADED
 
         self._audit_log.append(
             {
@@ -1767,303 +1273,208 @@ class BaseAgent:
         )
 
         for hook in self.hooks.on_error:
-
-            result = hook(
-                self,
-                exc,
-            )
-
+            result = hook(self, exc)
             if asyncio.iscoroutine(result):
                 await result
-                # =============================================================================
-# Registry Management
-# =============================================================================
+
+    # =================================================================
+    # Registry Management
+    # =================================================================
 
     def register_tool(
         self,
         name: str,
         tool: Any,
     ) -> None:
-        """
-        Register a tool implementation.
-        """
-
         if name in self._tools:
             raise ValueError(
                 f"Tool '{name}' already registered."
             )
-
         self._tools[name] = tool
-
-        self._audit(
-            "tool_registered",
-            name=name,
-        )
-
+        self._audit("tool_registered", name=name)
 
     def register_service(
         self,
         name: str,
         service: Any,
     ) -> None:
-        """
-        Register a shared service.
-        """
-
         if name in self._services:
             raise ValueError(
                 f"Service '{name}' already exists."
             )
-
         self._services[name] = service
-
-        self._audit(
-            "service_registered",
-            name=name,
-        )
-
+        self._audit("service_registered", name=name)
 
     def register_memory(
         self,
         name: str,
         memory: Any,
     ) -> None:
-
         self._memories[name] = memory
-
-        self._audit(
-            "memory_registered",
-            name=name,
-        )
-
+        self._audit("memory_registered", name=name)
 
     def register_contract(
         self,
         name: str,
         contract: Any,
     ) -> None:
-
         self._contracts[name] = contract
-
-        self._audit(
-            "contract_registered",
-            name=name,
-        )
-
+        self._audit("contract_registered", name=name)
 
     def register_state_manager(
         self,
         name: str,
         manager: Any,
     ) -> None:
-
         self._state_managers[name] = manager
-
         self._audit(
-            "state_manager_registered",
-            name=name,
+            "state_manager_registered", name=name,
         )
-
 
     def register_plugin(
         self,
         name: str,
         plugin: Any,
     ) -> None:
-
         self._plugins[name] = plugin
-
-        self._audit(
-            "plugin_registered",
-            name=name,
-        )
-
+        self._audit("plugin_registered", name=name)
 
     def register_chain(
         self,
         chain: SupportedChain,
     ) -> None:
-
-        self._chains[
-            chain.name.lower()
-        ] = chain
-
+        self._chains[chain.name.lower()] = chain
 
     def register_protocol(
         self,
         protocol: SupportedProtocol,
     ) -> None:
+        self._protocols[protocol.name.lower()] = protocol
 
-        self._protocols[
-            protocol.name.lower()
-        ] = protocol
+    # =================================================================
+    # Registry Lookup
+    # =================================================================
 
-
-# =============================================================================
-# Registry Lookup
-# =============================================================================
-
-    def get_tool(
-        self,
-        name: str,
-    ) -> Any:
-
+    def get_tool(self, name: str) -> Any:
         return self._tools.get(name)
 
-
-    def get_service(
-        self,
-        name: str,
-    ) -> Any:
-
+    def get_service(self, name: str) -> Any:
         return self._services.get(name)
 
-
-    def get_memory(
-        self,
-        name: str,
-    ) -> Any:
-
+    def get_memory(self, name: str) -> Any:
         return self._memories.get(name)
 
-
-    def get_contract(
-        self,
-        name: str,
-    ) -> Any:
-
+    def get_contract(self, name: str) -> Any:
         return self._contracts.get(name)
 
-
-    def get_plugin(
-        self,
-        name: str,
-    ) -> Any:
-
+    def get_plugin(self, name: str) -> Any:
         return self._plugins.get(name)
-
 
     def get_chain(
         self,
         name: str,
     ) -> SupportedChain | None:
-
-        return self._chains.get(
-            name.lower(),
-        )
-
+        return self._chains.get(name.lower())
 
     def get_protocol(
         self,
         name: str,
     ) -> SupportedProtocol | None:
+        return self._protocols.get(name.lower())
 
-        return self._protocols.get(
-            name.lower(),
-        )
+    # =================================================================
+    # Registry Removal
+    # =================================================================
 
+    def unregister_tool(self, name: str) -> None:
+        self._tools.pop(name, None)
 
-# =============================================================================
-# Registry Removal
-# =============================================================================
+    def unregister_service(self, name: str) -> None:
+        self._services.pop(name, None)
 
-    def unregister_tool(
-        self,
-        name: str,
-    ) -> None:
+    def unregister_plugin(self, name: str) -> None:
+        self._plugins.pop(name, None)
 
-        self._tools.pop(
-            name,
-            None,
-        )
-
-
-    def unregister_service(
-        self,
-        name: str,
-    ) -> None:
-
-        self._services.pop(
-            name,
-            None,
-        )
-
-
-    def unregister_plugin(
-        self,
-        name: str,
-    ) -> None:
-
-        self._plugins.pop(
-            name,
-            None,
-        )
-
-
-# =============================================================================
-# Registry Inspection
-# =============================================================================
+    # =================================================================
+    # Registry Inspection
+    # =================================================================
 
     @property
     def tools(self) -> tuple[str, ...]:
         return tuple(self._tools.keys())
 
-
     @property
     def services(self) -> tuple[str, ...]:
         return tuple(self._services.keys())
-
 
     @property
     def plugins(self) -> tuple[str, ...]:
         return tuple(self._plugins.keys())
 
-
     @property
     def memories(self) -> tuple[str, ...]:
         return tuple(self._memories.keys())
-
 
     @property
     def contracts(self) -> tuple[str, ...]:
         return tuple(self._contracts.keys())
 
+    # =================================================================
+    # Middleware
+    # =================================================================
 
-# =============================================================================
-# Internal Audit Helper
-# =============================================================================
+    def use_middleware(self, middleware: Any) -> None:
+        self._middleware.append(middleware)
 
-    def _audit(
-        self,
-        event: str,
-        **data: Any,
-    ) -> None:
-        """
-        Record lightweight audit events.
+    def remove_middleware(self, middleware: Any) -> None:
+        if middleware in self._middleware:
+            self._middleware.remove(middleware)
 
-        Later this will integrate with the
-        Audit Engine and Event Bus.
-        """
+    def clear_middleware(self) -> None:
+        self._middleware.clear()
 
-        self._audit_log.append(
-            {
-                "timestamp": utc_now(),
-                "event": event,
-                "data": data,
-            }
-        )
-        # =============================================================================
-# Dependency Resolution
-# =============================================================================
+    # =================================================================
+    # Extension Management
+    # =================================================================
 
-    def has_dependency(
+    def register_extension(
         self,
         name: str,
-    ) -> bool:
-        """
-        Returns True if dependency exists.
-        """
+        extension: Any,
+    ) -> None:
+        self._extensions[name] = extension
+        self._audit(
+            "extension_registered", name=name,
+        )
 
+    def get_extension(self, name: str) -> Any:
+        return self._extensions.get(name)
+
+    def unregister_extension(self, name: str) -> None:
+        self._extensions.pop(name, None)
+
+    @property
+    def extensions(self) -> tuple[str, ...]:
+        return tuple(self._extensions.keys())
+
+    # =================================================================
+    # Shared Objects
+    # =================================================================
+
+    def share(self, key: str, obj: Any) -> None:
+        self._shared_objects[key] = obj
+
+    def shared(self, key: str) -> Any:
+        return self._shared_objects.get(key)
+
+    def unshare(self, key: str) -> None:
+        self._shared_objects.pop(key, None)
+
+    # =================================================================
+    # Dependency Resolution
+    # =================================================================
+
+    def has_dependency(self, name: str) -> bool:
         return (
             name in self._services
             or name in self._tools
@@ -2072,15 +1483,7 @@ class BaseAgent:
             or name in self._contracts
         )
 
-
-    def resolve(
-        self,
-        name: str,
-    ) -> Any:
-        """
-        Resolve any registered object.
-        """
-
+    def resolve(self, name: str) -> Any:
         registries = (
             self._services,
             self._tools,
@@ -2091,7 +1494,6 @@ class BaseAgent:
         )
 
         for registry in registries:
-
             if name in registry:
                 return registry[name]
 
@@ -2099,15 +1501,7 @@ class BaseAgent:
             f"Dependency '{name}' not found."
         )
 
-
-    def require(
-        self,
-        name: str,
-    ) -> Any:
-        """
-        Resolve or fail immediately.
-        """
-
+    def require(self, name: str) -> Any:
         dependency = self.resolve(name)
 
         if dependency is None:
@@ -2117,58 +1511,78 @@ class BaseAgent:
 
         return dependency
 
+    # =================================================================
+    # DI Container
+    # =================================================================
 
-# =============================================================================
-# Resource Management
-# =============================================================================
+    def register_singleton(
+        self,
+        name: str,
+        instance: Any,
+    ) -> None:
+        self._singletons[name] = instance
+        self._container[name] = instance
+
+    def register_factory(
+        self,
+        name: str,
+        factory: Any,
+    ) -> None:
+        self._factories[name] = factory
+
+    def register_provider(
+        self,
+        name: str,
+        provider: Any,
+    ) -> None:
+        self._providers[name] = provider
+
+    def inject(self, name: str) -> Any:
+        if name in self._singletons:
+            return self._singletons[name]
+
+        if name in self._factories:
+            instance = self._factories[name]()
+            return instance
+
+        if name in self._providers:
+            return self._providers[name]
+
+        return self.resolve(name)
+
+    # =================================================================
+    # Resource Management
+    # =================================================================
 
     def register_resource(
         self,
         name: str,
         resource: Any,
     ) -> None:
-
         self._resources[name] = resource
 
-
-    def get_resource(
-        self,
-        name: str,
-    ) -> Any:
-
+    def get_resource(self, name: str) -> Any:
         return self._resources.get(name)
-
 
     async def release_resource(
         self,
         name: str,
     ) -> None:
-
-        resource = self._resources.pop(
-            name,
-            None,
-        )
+        resource = self._resources.pop(name, None)
 
         if resource is None:
             return
 
-        close = getattr(
-            resource,
-            "close",
-            None,
-        )
+        close = getattr(resource, "close", None)
 
         if callable(close):
-
             result = close()
-
             if asyncio.iscoroutine(result):
                 await result
 
-
-# =============================================================================
-# Background Task Management
-# =============================================================================
+    # =================================================================
+    # Background Task Management
+    # =================================================================
 
     def create_background_task(
         self,
@@ -2176,9 +1590,6 @@ class BaseAgent:
         *,
         name: str | None = None,
     ) -> asyncio.Task[Any]:
-        """
-        Create and track background task.
-        """
 
         task = asyncio.create_task(
             coro,
@@ -2193,103 +1604,231 @@ class BaseAgent:
 
         return task
 
-
-    async def cancel_background_tasks(
-        self,
-    ) -> None:
+    async def cancel_background_tasks(self) -> None:
 
         for task in list(self._tasks):
-
             if not task.done():
                 task.cancel()
 
         if self._tasks:
-
             await asyncio.gather(
                 *self._tasks,
                 return_exceptions=True,
             )
 
+    # =================================================================
+    # Named Worker Management
+    # =================================================================
 
-# =============================================================================
-# Event System
-# =============================================================================
+    def start_worker(
+        self,
+        name: str,
+        coro: Any,
+        *,
+        metadata: Metadata | None = None,
+    ) -> asyncio.Task[Any]:
+        if name in self._background_workers:
+            existing = self._background_workers[name]
+            if not existing.done():
+                raise ValueError(
+                    f"Worker '{name}' already running."
+                )
+
+        task = asyncio.create_task(coro, name=name)
+        self._background_workers[name] = task
+        self._worker_states[name] = True
+        self._worker_metadata[name] = metadata or {}
+
+        def _on_done(t: asyncio.Task[Any]) -> None:
+            self._worker_states[name] = False
+
+        task.add_done_callback(_on_done)
+
+        self._audit("worker_started", name=name)
+        return task
+
+    async def stop_worker(self, name: str) -> None:
+        task = self._background_workers.get(name)
+
+        if task is None or task.done():
+            return
+
+        task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await task
+
+        self._worker_states[name] = False
+        self._audit("worker_stopped", name=name)
+
+    async def _stop_workers(self) -> None:
+        for name in list(self._background_workers):
+            await self.stop_worker(name)
+
+    def is_worker_running(self, name: str) -> bool:
+        return self._worker_states.get(name, False)
+
+    @property
+    def active_workers(self) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name, running in self._worker_states.items()
+            if running
+        )
+
+    # =================================================================
+    # Cache Management
+    # =================================================================
+
+    def cache_get(
+        self,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        return self._cache.get(key, default)
+
+    def cache_set(
+        self,
+        key: str,
+        value: Any,
+    ) -> None:
+        self._cache[key] = value
+
+    def cache_delete(self, key: str) -> None:
+        self._cache.pop(key, None)
+
+    def cache_has(self, key: str) -> bool:
+        return key in self._cache
+
+    def cache_clear(self) -> None:
+        self._cache.clear()
+
+    def result_cache_get(
+        self,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        return self._result_cache.get(key, default)
+
+    def result_cache_set(
+        self,
+        key: str,
+        value: Any,
+    ) -> None:
+        self._result_cache[key] = value
+
+    # =================================================================
+    # Event System
+    # =================================================================
 
     def subscribe(
         self,
         event: str,
         callback: Any,
     ) -> None:
-
         self._event_handlers.setdefault(
-            event,
-            [],
+            event, [],
         ).append(callback)
 
+    def unsubscribe(
+        self,
+        event: str,
+        callback: Any,
+    ) -> None:
+        handlers = self._event_handlers.get(event, [])
+        if callback in handlers:
+            handlers.remove(callback)
 
     async def publish_event(
         self,
         event: str,
         payload: Any = None,
     ) -> None:
-
-        handlers = self._event_handlers.get(
-            event,
-            [],
-        )
+        handlers = self._event_handlers.get(event, [])
 
         for handler in handlers:
-
             result = handler(payload)
-
             if asyncio.iscoroutine(result):
                 await result
 
+        self.statistics.events_published += 1
 
-# =============================================================================
-# Health & Diagnostics
-# =============================================================================
+    # =================================================================
+    # Notification / Warning / Error Tracking
+    # =================================================================
 
-    def health_check(
+    def add_notification(
         self,
-    ) -> AgentHealth:
-        """
-        Return current health.
-        """
+        notification: Any,
+    ) -> None:
+        self._notifications.append(notification)
+
+    def add_warning(self, message: str) -> None:
+        self._warnings.append(message)
+        logger.warning(
+            "[%s] %s", self.identity.name, message,
+        )
+
+    def get_warnings(self) -> list[str]:
+        return list(self._warnings)
+
+    def get_errors(self) -> list[Exception]:
+        return list(self._errors)
+
+    def clear_warnings(self) -> None:
+        self._warnings.clear()
+
+    def clear_errors(self) -> None:
+        self._errors.clear()
+
+    # =================================================================
+    # Health & Diagnostics
+    # =================================================================
+
+    def health_check(self) -> AgentHealth:
 
         self.health.checked_at = utc_now()
+        self.health.active_tasks = len(self._tasks)
 
-        self.health.active_tasks = len(
-            self._tasks
-        )
+        self._last_health_check = utc_now()
 
         return self.health
 
-
-    def diagnostics(
-        self,
-    ) -> dict[str, Any]:
-        """
-        Runtime diagnostic snapshot.
-        """
+    def diagnostics(self) -> dict[str, Any]:
 
         return {
             "status": self.status.value,
             "running": self._running,
+            "paused": self._paused,
             "initialized": self._initialized,
+            "shutdown": self._shutdown,
             "background_tasks": len(self._tasks),
+            "active_workers": len(self.active_workers),
             "services": len(self._services),
             "tools": len(self._tools),
             "plugins": len(self._plugins),
+            "extensions": len(self._extensions),
             "chains": len(self._chains),
             "protocols": len(self._protocols),
-            "statistics": self.statistics,
+            "middleware": len(self._middleware),
+            "pending_jobs": len(self._pending_jobs),
+            "completed_jobs": len(self._completed_jobs),
+            "failed_jobs": len(self._failed_jobs),
+            "warnings": len(self._warnings),
+            "errors": len(self._errors),
+            "cache_keys": len(self._cache),
+            "startup_duration_ms": self._startup_duration_ms,
+            "statistics": {
+                "total_executions": self.statistics.total_executions,
+                "successful": self.statistics.successful_executions,
+                "failed": self.statistics.failed_executions,
+                "success_rate": self.statistics.success_rate,
+                "avg_latency_ms": self.statistics.average_latency_ms,
+                "peak_latency_ms": self.statistics.peak_latency_ms,
+            },
         }
 
-
-    def snapshot_state(
-        self,
-    ) -> AgentSnapshot:
+    def snapshot_state(self) -> AgentSnapshot:
 
         self.snapshot = AgentSnapshot(
             identity=self.identity,
@@ -2298,40 +1837,105 @@ class BaseAgent:
             statistics=self.statistics,
         )
 
+        self._last_snapshot = utc_now()
+
         return self.snapshot
 
+    # =================================================================
+    # Serialization
+    # =================================================================
 
-# =============================================================================
-# Cleanup
-# =============================================================================
+    def to_dict(self) -> dict[str, Any]:
 
-    async def cleanup(
+        return {
+            "identity": {
+                "agent_id": str(self.identity.agent_id),
+                "name": self.identity.name,
+                "version": self.identity.version,
+                "vendor": self.identity.vendor,
+                "instance_id": self.identity.instance_id,
+            },
+            "status": self.status.value,
+            "health": {
+                "status": self.health.status.value,
+                "message": self.health.message,
+                "is_healthy": self.health.is_healthy,
+            },
+            "config": {
+                "priority": self.config.priority.value,
+                "execution_mode": self.config.execution_mode.value,
+                "restart_policy": self.config.restart_policy.value,
+                "timeout_seconds": self.config.timeout_seconds,
+                "max_concurrent_tasks": self.config.max_concurrent_tasks,
+                "capabilities": sorted(
+                    c.value for c in self.config.capabilities
+                ),
+            },
+            "registries": {
+                "tools": list(self._tools.keys()),
+                "services": list(self._services.keys()),
+                "plugins": list(self._plugins.keys()),
+                "chains": list(self._chains.keys()),
+                "protocols": list(self._protocols.keys()),
+                "extensions": list(self._extensions.keys()),
+            },
+            "statistics": {
+                "total_executions": self.statistics.total_executions,
+                "successful": self.statistics.successful_executions,
+                "failed": self.statistics.failed_executions,
+                "success_rate": self.statistics.success_rate,
+                "uptime_seconds": self.statistics.uptime_seconds,
+            },
+            "runtime": {
+                "running": self._running,
+                "paused": self._paused,
+                "initialized": self._initialized,
+                "startup_duration_ms": self._startup_duration_ms,
+                "created_at": self._created_at.isoformat(),
+            },
+        }
+
+    # =================================================================
+    # Internal Audit Helper
+    # =================================================================
+
+    def _audit(
         self,
+        event: str,
+        **data: Any,
     ) -> None:
-        """
-        Release all managed resources.
-        """
+        self._audit_log.append(
+            {
+                "timestamp": utc_now(),
+                "event": event,
+                "data": data,
+            }
+        )
+
+    # =================================================================
+    # Cleanup
+    # =================================================================
+
+    async def cleanup(self) -> None:
 
         await self.cancel_background_tasks()
 
+        await self._stop_workers()
+
         for name in list(self._resources):
-            await self.release_resource(
-                name,
-            )
+            await self.release_resource(name)
 
         self._cache.clear()
         self._execution_cache.clear()
         self._temporary_storage.clear()
         self._result_cache.clear()
+        self._metrics_cache.clear()
 
-        self._audit(
-            "cleanup_completed",
-        )
+        self._audit("cleanup_completed")
 
-
-# =============================================================================
-# String Representation
-# =============================================================================
+    # =================================================================
+    # String Representation
+    # =================================================================
 
     def __repr__(self) -> str:
 
@@ -2340,3 +1944,51 @@ class BaseAgent:
             f"name={self.identity.name!r}, "
             f"status={self.status.value!r})"
         )
+
+
+# =============================================================================
+# Public Exports
+# =============================================================================
+
+__all__ = [
+
+    # Agent
+    "BaseAgent",
+
+    # Configuration
+    "AgentConfig",
+    "AgentIdentity",
+    "AgentMetadata",
+
+    # Runtime
+    "AgentStatistics",
+    "AgentHealth",
+    "AgentExecutionContext",
+    "AgentHooks",
+    "AgentSnapshot",
+
+    # Enums
+    "AgentCapability",
+    "AgentPriority",
+    "AgentStatus",
+    "ExecutionMode",
+    "HealthStatus",
+    "RestartPolicy",
+    "AuditSeverity",
+
+    # Data models
+    "SupportedChain",
+    "SupportedProtocol",
+
+    # Helpers
+    "generate_agent_id",
+    "generate_execution_id",
+    "generate_task_id",
+    "utc_now",
+    "monotonic_ms",
+    "validate_agent_name",
+    "validate_version",
+    "ensure_directory",
+    "safe_metadata",
+    "is_async_callable",
+]

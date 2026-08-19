@@ -74,6 +74,8 @@ class RecordKind(StrEnum):
     LOGS = "logs"
     #: A transaction receipt.
     RECEIPT = "receipt"
+    #: A balance snapshot — native or token.
+    BALANCE = "balance"
 
 
 def content_id(chain: str, kind: RecordKind | str, payload: Any) -> str:

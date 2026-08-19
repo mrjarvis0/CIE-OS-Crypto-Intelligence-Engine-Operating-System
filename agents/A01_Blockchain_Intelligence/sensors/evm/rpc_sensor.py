@@ -45,6 +45,11 @@ from typing import Any, Final
 from blockchain.reorg.finality import finality_policy
 from blockchain.rpc.clients.dispatch import CallResult, ChainDispatcher
 from config.rpc.chains import ChainName, ChainType, get_chain, is_supported_chain
+from contracts.balances import (
+    encode_balance_of_call,
+    parse_balance_of_response,
+    parse_balance_response,
+)
 from core.exceptions import SensorError
 
 from ..base import Capability, Sensor, chain_str
@@ -62,6 +67,8 @@ DEFAULT_LOG_RANGE: Final[int] = 500
 _M_BLOCK_NUMBER: Final[str] = "eth_blockNumber"
 _M_GET_BLOCK: Final[str] = "eth_getBlockByNumber"
 _M_GET_LOGS: Final[str] = "eth_getLogs"
+_M_GET_BALANCE: Final[str] = "eth_getBalance"
+_M_ETH_CALL: Final[str] = "eth_call"
 
 
 def parse_quantity(value: Any) -> int | None:
@@ -346,6 +353,102 @@ class EvmRpcSensor(Sensor):
         # Height is the range start: a log batch spans heights, so no single
         # one identifies it, and the start is what a checkpoint advances from.
         return self._determined(result, RecordKind.LOGS, from_height, payload)
+
+    # -- balance ---------------------------------------------------------
+
+    def balance(self, address: str, *, block_tag: str = "latest") -> SensorResult:
+        """
+        Native balance of an address at a block tag.
+
+        The response is a hex quantity of the chain's smallest native unit
+        (wei on Ethereum).  Parsed into an int and carried with provenance;
+        the raw hex is not discarded — it is part of the payload so
+        normalization can verify the parse.
+        """
+        if not address or not isinstance(address, str):
+            raise SensorError(
+                "address must be a non-empty string",
+                sensor=self.name,
+                chain=self._chain,
+            )
+
+        result = self._dispatcher.call(
+            self._chain, _M_GET_BALANCE, [address, block_tag]
+        )
+        if not result.determined:
+            return self._undetermined(result, _M_GET_BALANCE)
+
+        parsed = parse_balance_response(result.value)
+        if parsed is None:
+            return self._malformed(
+                result,
+                _M_GET_BALANCE,
+                f"unreadable balance response: {result.value!r}",
+            )
+
+        payload = {
+            "address": address.lower(),
+            "balance_raw": result.value,
+            "balance_wei": parsed,
+        }
+        return self._determined(result, RecordKind.BALANCE, None, payload)
+
+    def token_balance(
+        self,
+        address: str,
+        token: str,
+        *,
+        block_tag: str = "latest",
+    ) -> SensorResult:
+        """
+        ERC-20 ``balanceOf(address)`` for one token contract.
+
+        The amount returned is in the token's own base unit.  Decimals are
+        not resolved here — that is the job of
+        :class:`contracts.decimals.TokenDecimalsResolver`, which this layer
+        does not import.  Carrying the raw integer with unknown scale is
+        correct; silently dividing by 10^18 would render a 6-decimal token
+        a trillion times too small.
+        """
+        if not address or not isinstance(address, str):
+            raise SensorError(
+                "address must be a non-empty string",
+                sensor=self.name,
+                chain=self._chain,
+            )
+        if not token or not isinstance(token, str):
+            raise SensorError(
+                "token must be a non-empty string",
+                sensor=self.name,
+                chain=self._chain,
+            )
+
+        try:
+            call_obj, tag = encode_balance_of_call(token, address, block_tag=block_tag)
+        except ValueError as exc:
+            raise SensorError(
+                str(exc), sensor=self.name, chain=self._chain
+            ) from exc
+
+        result = self._dispatcher.call(self._chain, _M_ETH_CALL, [call_obj, tag])
+        if not result.determined:
+            return self._undetermined(result, _M_ETH_CALL)
+
+        parsed = parse_balance_of_response(result.value)
+        if parsed is None:
+            return self._malformed(
+                result,
+                _M_ETH_CALL,
+                f"unreadable balanceOf response for {token}: {result.value!r}",
+            )
+
+        payload = {
+            "address": address.lower(),
+            "token": token.lower(),
+            "balance_raw": result.value,
+            "balance": parsed,
+        }
+        return self._determined(result, RecordKind.BALANCE, None, payload)
 
     # -- health ----------------------------------------------------------
 

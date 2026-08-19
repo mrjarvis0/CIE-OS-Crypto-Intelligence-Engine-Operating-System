@@ -92,25 +92,25 @@ def test_no_detector_errors(results, name):
 
 def test_whale_backtest_standalone():
     r = run_backtest("whale")
-    assert r.sample_size == 120
+    assert r.sample_size == 140
     assert r.promotable
 
 
 def test_dormant_backtest_standalone():
     r = run_backtest("dormant")
-    assert r.sample_size == 120
+    assert r.sample_size == 125
     assert r.promotable
 
 
 def test_anomaly_backtest_standalone():
     r = run_backtest("anomaly")
-    assert r.sample_size == 120
+    assert r.sample_size == 135
     assert r.promotable
 
 
 def test_exchange_flow_backtest_standalone():
     r = run_backtest("exchange_flow")
-    assert r.sample_size == 120
+    assert r.sample_size == 135
     assert r.promotable
 
 
