@@ -42,23 +42,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any
 
+from schemas.stance import Stance
 from .maturity import GateDecision, MaturityGate
 from .vocabulary import BindingConstraint, binding_constraint, qualifier
-
-
-class Stance(StrEnum):
-    """What a conclusion asserts."""
-
-    #: Something was observed. Supported by evidence of its presence.
-    AFFIRMED = "affirmed"
-    #: Something was looked for and not found, over a window deep enough to
-    #: make that meaningful.
-    NEGATED = "negated"
-    #: The question could not be answered. Distinct from a negative.
-    UNDETERMINED = "undetermined"
 
 
 @dataclass(frozen=True, slots=True)

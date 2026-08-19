@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-a01:
+    name: A01 Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/A01_Blockchain_Intelligence
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy --ignore-missing-imports config/ schemas/ decision/
+        continue-on-error: true
+
+      - name: Test
+        run: python -m pytest -x -q --timeout=30
+        env:
+          PYTHONPATH: .
+
+  test-a02:
+    name: A02 Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/A02_News_Intelligence
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pytest
+
+      - name: Test
+        run: python -m pytest -x -q

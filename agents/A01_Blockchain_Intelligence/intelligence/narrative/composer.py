@@ -42,7 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
-from decision.conclusions import Stance
+from schemas.stance import Stance
 
 
 @dataclass(frozen=True, slots=True)

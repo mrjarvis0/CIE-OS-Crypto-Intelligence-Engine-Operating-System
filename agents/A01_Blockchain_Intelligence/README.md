@@ -1,7 +1,7 @@
 # A01 Blockchain Intelligence Agent
 
 **Project:** CIE-OS (Crypto Intelligence Engine Operating System)
-**Status:** Structure finalized — implementation in progress (vertical slices)
+**Status:** Core pipeline complete — all 16 analyzers, 19 skills, full scoring engine
 
 ---
 
@@ -87,7 +87,7 @@ Build one vertical slice end-to-end, then repeat:
 | `memory/`, `tools/`, `planning/` | Implemented — the three largest packages |
 | `config/`, `core/` | Implemented (some structural debt; `core/agent.py` incomplete) |
 | `cli/`, `evaluation/`, `prompts/` | Implemented — entry point, backtest harness, injection defence |
-| `intelligence/` | Mixed — pipeline, evidence graph, and 2 detectors real; most subpackages stub |
+| `intelligence/` | Complete — 16 analyzers (4 primary + 12 supplementary), scoring engine, correlation, graph analysis |
 | `blockchain/` | RPC dispatch, provider catalog, and reorg tracking — consumed by `sensors/` and `ingestion/` |
 | `sensors/` | Implemented — EVM JSON-RPC capture for 7 chains, provenance attached at read |
 | `ingestion/` | Implemented — reorg-safe head polling, checkpoints, dedup, bounded queue, backfill |
@@ -95,7 +95,7 @@ Build one vertical slice end-to-end, then repeat:
 | `contracts/` | Implemented — ERC-20 and ERC-721 event decoding, discriminated by log shape |
 | `normalization/` | Implemented — validation that refuses, quality checks that annotate |
 | `database/` | Implemented — SQLite system of record, atomic idempotent writes, soft withdrawal |
-| `skills/` | 3 of 18 implemented — wallet profile, whale transfers, token flow; the rest record what blocks them |
+| `skills/` | 19 of 19 implemented — all skills built with LIMITED readiness where data sources are pending |
 | `intelligence/engines/` | Implemented — skill composition feeding the detectors from storage |
 | `decision/` | Implemented — maturity gate, confidence vocabulary, alert budgets, recommendations |
 | `interfaces/` | Implemented — service facade plus a read-only loopback REST API |
@@ -245,4 +245,9 @@ python -m cli ingest --db a01.db --blocks 50 --tokens && python -m cli investiga
 | `python -m cli investigate --address 0x… --subject file.json` | Investigate a hand-supplied subject |
 | `python -m pytest -q` | 782 tests, config in `pytest.ini` |
 
-Dependencies are declared in the repo root `requirements.txt`.
+Dependencies are declared in `pyproject.toml`. Install with:
+
+```bash
+pip install ".[dev]"        # core + dev tools
+pip install ".[all,dev]"    # everything including postgres, redis, chromadb
+```

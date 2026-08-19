@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import shutil
 import struct
@@ -51,6 +52,8 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
+
+_logger = logging.getLogger(__name__)
 
 import aiosqlite
 
@@ -1521,7 +1524,7 @@ class ConversationMemory(BaseMemory[Message]):
                     else:
                         listener(event_type, key=key, data=data)
                 except Exception:
-                    pass
+                    _logger.debug("event listener failed for %s", event_type, exc_info=True)
         if self._db is not None:
             try:
                 await self.db.execute(
@@ -1536,7 +1539,7 @@ class ConversationMemory(BaseMemory[Message]):
                 )
                 await self.db.commit()
             except Exception:
-                pass
+                _logger.debug("event persistence failed for %s", event_type, exc_info=True)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -1844,8 +1847,8 @@ class ConversationMemory(BaseMemory[Message]):
         for index_sql in indices:
             try:
                 await self.db.execute(index_sql)
-            except Exception as e:
-                pass  # Index may already exist
+            except Exception:
+                _logger.debug("index creation skipped (may already exist): %s", index_sql[:60])
 
         await self.db.commit()
 
@@ -1985,5 +1988,5 @@ class ConversationMemory(BaseMemory[Message]):
             try:
                 await self.db.execute(f"VACUUM {table}")
             except Exception:
-                pass  # VACUUM may not be available in all SQLite versions
+                _logger.debug("VACUUM skipped for table %s", table)
         await self.db.commit()

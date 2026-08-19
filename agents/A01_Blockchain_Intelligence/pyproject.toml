@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cie-os-a01"
+version = "1.0.0"
+description = "CIE-OS A01 Blockchain Intelligence Agent — transforms fragmented blockchain data into reliable, explainable, actionable intelligence"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+dependencies = [
+    "pydantic>=2.0,<3.0",
+    "pydantic-settings>=2.0,<3.0",
+    "aiosqlite>=0.19.0",
+]
+
+[project.optional-dependencies]
+postgres = ["asyncpg>=0.29.0"]
+redis = ["redis[hiredis]>=5.0.0"]
+vector = ["chromadb>=0.4.0"]
+grpc = ["grpcio>=1.60.0", "grpcio-tools>=1.60.0"]
+all = [
+    "asyncpg>=0.29.0",
+    "redis[hiredis]>=5.0.0",
+    "chromadb>=0.4.0",
+    "grpcio>=1.60.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-timeout>=2.2.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8.0",
+]
+
+[project.scripts]
+a01 = "cli.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+timeout = 30
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::ResourceWarning:aiosqlite",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "B008",    # function call in default argument
+    "SIM108",  # ternary operator
+    "RUF012",  # mutable class variable annotation
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "config", "cli", "database", "schemas", "sensors",
+    "ingestion", "normalization", "intelligence", "memory",
+    "planning", "tools", "skills", "decision", "tiers",
+    "pipeline", "contracts", "blockchain", "knowledge",
+    "telemetry", "evaluation", "interfaces", "prompts",
+    "fixtures", "core",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true

@@ -49,7 +49,7 @@ import math
 from typing import Any, Final
 
 from database.analytics import SqliteAnalyticsRepository, TransferRecord
-from intelligence.analysis.whale import DEFAULT_PERCENTILE
+from config.constants import WHALE_PERCENTILE as DEFAULT_PERCENTILE
 from schemas.address import Address
 from tiers.ledger import LabelSet, LabelRepository
 

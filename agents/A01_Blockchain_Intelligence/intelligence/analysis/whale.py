@@ -35,12 +35,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from config.constants import WHALE_PERCENTILE
 from ..schemas.evidence import ClaimTier, ErrorRate, EvidenceSource
 from .base import AnalyzerResult, BaseAnalyzer
 
 # Defaults. Every one is overridable per subject, because a sensible whale
 # threshold for a blue-chip asset is nonsense for a long-tail token.
-DEFAULT_PERCENTILE = 99.9
+DEFAULT_PERCENTILE = WHALE_PERCENTILE
 DEFAULT_SUPPLY_FRACTION = 0.001
 DEFAULT_USD_FLOOR = 1_000_000.0
 

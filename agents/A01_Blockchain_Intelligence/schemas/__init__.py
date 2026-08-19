@@ -44,6 +44,7 @@ from .amount import (
     AmountError,
 )
 from .block import CanonicalBlock, CanonicalTransaction, from_unix, utc_now
+from .stance import Stance
 from .token import CanonicalNftTransfer, CanonicalTokenTransfer, TokenActivity
 
 __all__ = [
@@ -61,6 +62,7 @@ __all__ = [
     "CanonicalNftTransfer",
     "CanonicalTokenTransfer",
     "CanonicalTransaction",
+    "Stance",
     "TokenActivity",
     "from_unix",
     "utc_now",

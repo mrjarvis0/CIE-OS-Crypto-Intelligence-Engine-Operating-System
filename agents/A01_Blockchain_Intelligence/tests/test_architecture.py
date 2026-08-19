@@ -76,18 +76,7 @@ UNRANKED: frozenset[str] = frozenset({
 #: fixed the same way: move the shared name down to a layer both sides can
 #: reach. That relocation changes a package's public surface, so it is scoped
 #: work rather than a side effect of adding this test. See BUILD_LOG.md.
-KNOWN_UPWARD: frozenset[tuple[str, str, str]] = frozenset({
-    (
-        "skills/whale_detection/transfers.py",
-        "intelligence",
-        "DEFAULT_PERCENTILE, the whale threshold constant",
-    ),
-    (
-        "intelligence/narrative/composer.py",
-        "decision",
-        "Stance, the conclusion vocabulary enum",
-    ),
-})
+KNOWN_UPWARD: frozenset[tuple[str, str, str]] = frozenset()
 
 
 #: Import cycles between layers that already existed, as ``(pair, cause)``.
@@ -98,13 +87,7 @@ KNOWN_UPWARD: frozenset[tuple[str, str, str]] = frozenset({
 #:
 #: It is listed separately anyway, because a cycle is the stronger claim. An
 #: upward import bends the stack; a cycle means there is no stack to bend.
-KNOWN_CYCLES: frozenset[tuple[str, str]] = frozenset({
-    (
-        "intelligence <-> skills",
-        "skills/whale_detection/transfers.py pulls DEFAULT_PERCENTILE up, "
-        "while intelligence/engines/composition.py reads skills.base down",
-    ),
-})
+KNOWN_CYCLES: frozenset[tuple[str, str]] = frozenset()
 
 
 def _package_of(module: str) -> str:

@@ -169,6 +169,15 @@ class Event(StrEnum):
 
 
 # ==============================================================================
+# DETECTION THRESHOLDS
+# ==============================================================================
+
+#: Percentile rank a transfer must meet to qualify as whale-scale. Shared by the
+#: whale analyzer and the whale transfer skill so the skill's population size
+#: requirement stays consistent with the threshold the detector will apply.
+WHALE_PERCENTILE: Final[float] = 99.9
+
+# ==============================================================================
 # RUNTIME DEFAULTS
 # ==============================================================================
 
@@ -236,6 +245,7 @@ __all__ = [
     "AGENT_NAME",
     "DEFAULT_ENCODING",
     "NO_TRADE_EXECUTION",
+    "WHALE_PERCENTILE",
     "Environment",
     "Chain",
     "SUPPORTED_CHAINS",
