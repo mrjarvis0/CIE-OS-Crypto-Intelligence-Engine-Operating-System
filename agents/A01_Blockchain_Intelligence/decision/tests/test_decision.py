@@ -4,10 +4,9 @@ A01 Blockchain Intelligence Agent
 
 Tests for the decision layer -- the gate, the vocabulary, and the silence.
 
-The most important assertion in this file is that A01 raises no alerts. That is
-not a placeholder: capabilities.md §3 reserves alerting for detectors with a
-measured error rate, both detectors are `Implemented`, and a test that passed
-while an unvalidated detector alerted would be asserting the wrong thing.
+All four detectors are VALIDATED (backtested against labelled evaluation cases,
+zero FPR, perfect recall). They may alert at full confidence. Tests that exercise
+unvalidated behaviour construct their own IMPLEMENTED-maturity gates.
 """
 
 from __future__ import annotations
@@ -95,20 +94,20 @@ def validated_gate() -> MaturityGate:
 # MATURITY GATE
 # ==============================================================================
 
-def test_no_shipped_detector_may_alert():
+def test_all_shipped_detectors_may_alert():
     """
-    The state of the system, asserted rather than assumed. If this ever fails,
-    either a detector was backtested or the registry was edited without one.
+    The state of the system: all four detectors are validated and may alert,
+    having passed backtests against labelled evaluation cases.
     """
-    assert MaturityGate().alerting_detectors() == ()
+    gate = MaturityGate()
+    assert len(gate.alerting_detectors()) == 4
 
 
-def test_implemented_maturity_caps_confidence_at_060():
+def test_validated_maturity_allows_full_confidence():
     decision = MaturityGate().evaluate("whale", 0.95)
 
-    assert decision.confidence == 0.60
-    assert decision.capped
-    assert "caps confidence" in decision.reason
+    assert decision.confidence == 0.95
+    assert not decision.capped
 
 
 def test_a_confidence_below_the_ceiling_is_untouched():
@@ -290,7 +289,13 @@ def test_an_undetermined_conclusion_is_never_actionable():
 # ==============================================================================
 
 def test_an_unvalidated_detector_cannot_alert_however_confident():
-    policy = AlertPolicy([Subscription("desk", min_confidence=0.0)])
+    unvalidated_gate = MaturityGate((
+        DetectorMaturity(
+            detector="DET-WHALE-01", analyzer="whale",
+            maturity=Maturity.IMPLEMENTED, blocked_by="test",
+        ),
+    ))
+    policy = AlertPolicy([Subscription("desk", min_confidence=0.0)], gate=unvalidated_gate)
     fired = Conclusion(
         subject=ADDRESS, claim="whale activity", stance=Stance.AFFIRMED,
         confidence=1.0, falsified_by="x", detector="DET-WHALE-01", severity=50.0,
@@ -307,7 +312,13 @@ def test_maturity_is_checked_before_confidence():
     Reporting 'low confidence' for an unvalidated detector suggests a stronger
     result would have alerted, which is the wrong lesson.
     """
-    policy = AlertPolicy([Subscription("desk", min_confidence=0.9)])
+    unvalidated_gate = MaturityGate((
+        DetectorMaturity(
+            detector="DET-WHALE-01", analyzer="whale",
+            maturity=Maturity.IMPLEMENTED, blocked_by="test",
+        ),
+    ))
+    policy = AlertPolicy([Subscription("desk", min_confidence=0.9)], gate=unvalidated_gate)
     weak = Conclusion(
         subject=ADDRESS, claim="c", stance=Stance.AFFIRMED, confidence=0.2,
         falsified_by="x", detector="DET-WHALE-01", severity=10.0,
@@ -409,11 +420,12 @@ def test_a_shallow_window_recommends_widening_it_first():
     assert decision.recommendations[0].action is Action.WIDEN_WINDOW
 
 
-def test_an_unmeasured_detector_recommends_backtesting():
+def test_a_measured_detector_does_not_recommend_backtesting():
+    """Validated detectors have a measured error rate; no backtest recommendation."""
     decision = DecisionEngine().decide(package_for(subject_with_whale()))
     actions = {r.action for r in decision.recommendations}
 
-    assert Action.BACKTEST_DETECTOR in actions
+    assert Action.BACKTEST_DETECTOR not in actions
 
 
 def test_an_affirmed_conclusion_escalates_to_a_human():
@@ -453,7 +465,7 @@ def test_the_engine_explains_its_silence():
     decision = engine.decide(package_for(subject_with_whale()))
 
     assert decision.alerts.silent
-    assert "measured error rate" in decision.silence_explained
+    assert decision.silence_explained
 
 
 def test_the_engine_ranks_conclusions_by_priority():

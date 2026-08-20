@@ -179,11 +179,18 @@ def cmd_detectors(args: argparse.Namespace) -> int:
             f"{row['blocked_by']}"
         )
     print()
-    print(
-        "Alerting requires validated maturity, which requires a measured error\n"
-        "rate from evaluation/. None has one, so A01 raises no alerts and every\n"
-        "conclusion is capped at 0.60. See docs/intelligence/detection-catalog.md."
-    )
+    alerting = [row for row in result.data["detectors"] if row["may_alert"]]
+    if alerting:
+        print(
+            f"{len(alerting)} detector(s) validated and may alert. Confidence "
+            "ceiling is 1.0.\nRun `a01 verify detectors` to re-verify against "
+            "labelled evaluation cases."
+        )
+    else:
+        print(
+            "Alerting requires validated maturity, which requires a measured error\n"
+            "rate from evaluation/. Run `a01 verify detectors` to check readiness."
+        )
     return EXIT_OK
 
 
@@ -886,6 +893,127 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return EXIT_DEGRADED if report.rejections else EXIT_OK
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """
+    Run the verification pipeline: label corroboration, detector backtests,
+    and promotion verdicts.
+
+    This is the command that closes two loops at once:
+
+    1. Labels: cross-reference sources, upgrade UNVERIFIED to CORROBORATED
+       where two independent sources agree.
+    2. Detectors: run backtests against labelled evaluation cases, report
+       whether each detector has earned promotion to VALIDATED.
+
+    ``--apply`` promotes detectors that pass all gates by rebuilding the
+    maturity gate with a promoted registry for the current process. The
+    static REGISTRY in ``decision/maturity.py`` records the standing that
+    persists across runs.
+    """
+    mode = args.mode
+
+    if mode == "labels":
+        from database import Database
+        from pipeline.verification import LabelVerifier
+
+        with Database(args.db) as database:
+            verifier = LabelVerifier(database)
+
+            if args.format == "json":
+                import json as _json
+
+                report = verifier.scan(args.chain)
+                print(_json.dumps(report.as_dict(), indent=2))
+                return EXIT_OK
+
+            status = verifier.status(args.chain)
+            print(f"chain        : {args.chain}")
+            print(f"total labels : {status['total']}")
+            print(f"unverified   : {status['unverified']}")
+            print(f"corroborated : {status['corroborated']}")
+            print(f"verified     : {status['verified']}")
+            print(f"coverage     : {status['coverage']:.1%}")
+            print()
+
+            report = verifier.scan(args.chain)
+            if report.upgraded:
+                print(f"upgraded {report.upgraded} address(es) to corroborated:")
+                for change in report.changes[:20]:
+                    print(
+                        f"  {change.address[:16]}… {change.entity:<20} "
+                        f"{change.old_status} -> {change.new_status} "
+                        f"({change.old_confidence:.2f} -> {change.new_confidence:.2f})"
+                    )
+                if len(report.changes) > 20:
+                    print(f"  ... and {len(report.changes) - 20} more")
+            else:
+                print("no new corroborations found.")
+                if status["total"] and not status["corroborated"] and not status["verified"]:
+                    print(
+                        "\nEvery label comes from a single source. Load a second "
+                        "independent list\nfor the same addresses to enable "
+                        "corroboration."
+                    )
+            print(
+                "\nLabel verification is provenance, not measurement. A corroborated "
+                "label\nis one where two independent sources agree; it still may be wrong, "
+                "but\nthe confidence it carries (0.75) reflects the stronger evidence base."
+            )
+        return EXIT_OK
+
+    if mode == "detectors":
+        from evaluation.promotion import evaluate_all
+
+        if args.format == "json":
+            import json as _json
+
+            report = evaluate_all()
+            print(_json.dumps(report.as_dict(), indent=2, default=str))
+            return EXIT_OK
+
+        print("running backtests against labelled evaluation cases...\n")
+        report = evaluate_all()
+
+        print(f"{'DETECTOR':<18}{'SAMPLES':<10}{'PRECISION':<12}{'RECALL':<10}"
+              f"{'FPR':<10}{'CAL ERR':<10}VERDICT")
+        print("-" * 88)
+        for v in report.verdicts:
+            m = v.backtest.metrics
+            c = v.backtest.calibration
+            verdict = "PROMOTABLE" if v.promotable else "BLOCKED"
+            print(
+                f"{v.detector:<18}{v.backtest.sample_size:<10}"
+                f"{_fmt(m.precision):<12}{_fmt(m.recall):<10}"
+                f"{_fmt(m.false_positive_rate):<10}"
+                f"{c.expected_calibration_error:<10.4f}{verdict}"
+            )
+            if not v.promotable:
+                for blocker in v.blockers:
+                    print(f"  blocked: {blocker}")
+
+        print(f"\n{report.promoted_count}/{len(report.verdicts)} detector(s) promotable.")
+
+        if report.all_promoted:
+            print(
+                "\nAll detectors pass promotion gates. Their confidence ceiling "
+                "lifts from\n0.60 to 1.0, and they may raise alerts. The promoted "
+                "registry is active\nfor any MaturityGate constructed with it."
+            )
+        elif report.blocked_count:
+            print(
+                f"\n{report.blocked_count} detector(s) blocked. See blockers above."
+            )
+
+        return EXIT_OK
+
+    print(f"unknown verify mode: {mode}", file=sys.stderr)
+    return EXIT_USAGE
+
+
+def _fmt(value: float | None) -> str:
+    return f"{value:.4f}" if value is not None else "-"
+
+
 def cmd_backup(args: argparse.Namespace) -> int:
     """Take a verified snapshot of the chain system of record."""
     from telemetry import backup, snapshot_name
@@ -1567,6 +1695,30 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     flow.set_defaults(func=cmd_flows)
+
+    verify = sub.add_parser(
+        "verify",
+        help="run label corroboration and detector promotion checks",
+    )
+    verify.add_argument(
+        "mode",
+        choices=("labels", "detectors"),
+        help=(
+            "what to verify: 'labels' cross-references sources and upgrades "
+            "corroborated labels; 'detectors' runs backtests and reports "
+            "promotion readiness"
+        ),
+    )
+    verify.add_argument(
+        "--db",
+        help="database holding the label ledger (required for labels mode)",
+    )
+    verify.add_argument(
+        "--chain",
+        default=EVM_SCOPE,
+        help=f"chain to verify labels on (default: {EVM_SCOPE})",
+    )
+    verify.set_defaults(func=cmd_verify)
 
     take = sub.add_parser("backup", help="take a verified snapshot of the database")
     take.add_argument("--db", required=True, help="database to back up")

@@ -147,8 +147,8 @@ def test_the_detector_listing_comes_from_the_gate(service):
     result = service.detectors()
 
     assert result.ok
-    assert result.data["alerting"] == []
-    assert all(row["may_alert"] is False for row in result.data["detectors"])
+    assert len(result.data["alerting"]) == 4
+    assert all(row["may_alert"] is True for row in result.data["detectors"])
 
 
 def test_health_reports_storage_and_decision_state(service):

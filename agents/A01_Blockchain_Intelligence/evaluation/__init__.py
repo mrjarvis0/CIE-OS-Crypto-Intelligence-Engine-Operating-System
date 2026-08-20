@@ -64,6 +64,13 @@ from .labelled import (
     whale_cases,
 )
 from .runner import run_all, run_backtest
+from .promotion import (
+    PromotionReport,
+    PromotionVerdict,
+    build_promoted_registry,
+    evaluate_all,
+    evaluate_detector,
+)
 
 __all__ = [
     "Backtest",
@@ -76,10 +83,15 @@ __all__ = [
     "CalibrationReport",
     "ClassificationMetrics",
     "ConfusionMatrix",
+    "PromotionReport",
+    "PromotionVerdict",
     "anomaly_cases",
+    "build_promoted_registry",
     "calibration",
     "confusion_matrix",
     "dormant_cases",
+    "evaluate_all",
+    "evaluate_detector",
     "exchange_flow_cases",
     "run_all",
     "run_backtest",

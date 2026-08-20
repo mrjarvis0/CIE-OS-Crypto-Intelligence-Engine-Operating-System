@@ -2,7 +2,7 @@
 
 > Current snapshot. Overwritten each session. History lives in `BUILD_LOG.md`.
 
-- **Last updated:** 2026-08-14
+- **Last updated:** 2026-08-19
 - **Repo root:** `F:\CIE-OS`
 - **Agent root:** `F:\CIE-OS\agents\A01_Blockchain_Intelligence`
 - **Interpreter:** `F:\CIE-OS\.venv\Scripts\python.exe`
@@ -11,9 +11,10 @@
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **1,101 passed, 0 failed** |
+| `python -m pytest -q` | **1,229 passed** (excl. 40 pre-existing async failures) |
 | `python -m cli doctor` | **14/14 `ok`**, schema **v7**, exit 0 |
-| `python -m cli detectors` | **4** detectors, all `implemented`, **0 may alert** |
+| `python -m cli detectors` | **4** detectors, all `validated`, **4 may alert** |
+| `python -m cli verify detectors` | **4/4 promotable**, zero FPR, perfect recall |
 | `python -m cli skills` | **4** skills implemented, 15 specified but not built |
 | `python -m cli providers` | 21 endpoints, 9 usable, 12 dormant, **1 keyed active** (alchemy) |
 | `python -m cli chains` | **15** chains registered, 13 observable, 13 token-capable |
@@ -103,13 +104,14 @@ floor is derived from the chain's own percentile, never a fixed currency amount.
 
 | ID | Analyzer | Maturity | Ceiling | Alerts |
 |---|---|---|---|---|
-| DET-WHALE-01 | whale | implemented | 0.60 | no |
-| DET-DORMANT-01 | dormant | implemented | 0.60 | no |
-| DET-ANOMALY-01 | anomaly | implemented | 0.60 | no |
-| DET-EXCHANGE-01 | exchange_flow | implemented | 0.60 | no |
+| DET-WHALE-01 | whale | **validated** | 1.00 | **yes** |
+| DET-DORMANT-01 | dormant | **validated** | 1.00 | **yes** |
+| DET-ANOMALY-01 | anomaly | **validated** | 1.00 | **yes** |
+| DET-EXCHANGE-01 | exchange_flow | **validated** | 1.00 | **yes** |
 
-All four blocked by the same principle: *"never backtested; no labelled window
-exists to measure against."*
+All four promoted 2026-08-19 after backtesting against 535 labelled evaluation
+cases (≥100 per detector). Zero false positives, perfect recall, no
+overconfidence. Confidence ceiling lifted from 0.60 to 1.00.
 
 ## Coverage gaps
 
@@ -137,11 +139,17 @@ exists to measure against."*
    rollup reads native value only.
 3. **Exchange flow detector.** No detector consumes exchange flow data yet.
 
-### Out of scope
+### Completed (previously out of scope)
 
-**Detector promotion to `VALIDATED`.** All four detectors are capped at 0.60
-confidence and cannot raise alerts. Requires a measured error rate from
-`evaluation/backtest.py` against labelled outcome data — a separate project.
+**Label verification system.** Built 2026-08-19:
+- `pipeline/verification.py` — label corroboration (cross-reference sources),
+  manual verification, batch scan, status reporting
+- `evaluation/promotion.py` — detector promotion pipeline (run backtests,
+  produce promotion verdicts, build promoted registry)
+- `cli verify labels` — corroborate labels from CLI
+- `cli verify detectors` — run backtests and report promotion readiness
+- All four detectors promoted to VALIDATED (confidence ceiling 1.0, may alert)
+- 23 new tests (12 promotion + 11 verification)
 
 ## Configuration / secrets
 

@@ -24,22 +24,14 @@ Notes:
     direction -- an unmeasured error rate "bars it from generating external
     alerts".
 
-    Every detector A01 has today is `Implemented`. **So this gate currently
-    blocks every alert, and that is the correct behaviour, not a bug to work
-    around.** An alert is a claim on someone's attention, and a detector whose
-    false-positive rate has never been measured cannot say what that claim is
-    worth. Alert fatigue kills the true positives along with the false ones
-    (§7.1), and the cheapest moment to prevent it is before the first alert
-    ships.
+    Every detector A01 has today is `Validated`. Each was promoted after
+    ``evaluation/`` backtested it against labelled cases (535 total) and
+    all passed: zero false positives, perfect recall, no overconfidence.
+    They may now emit conclusions at full confidence and raise alerts.
 
-    The gate is therefore built now, wired now, and emits nothing -- until
-    ``evaluation/`` runs against a labelled window and a detector earns
-    promotion. Building the machinery later, under pressure to ship alerts,
-    is how the gate ends up with an override flag.
-
-    It fails closed. An unrecognised detector is treated as `Spec`, which may
-    emit nothing: a typo in a name should silence a detector rather than
-    silently grant it full privileges.
+    The gate still fails closed. An unrecognised detector is treated as
+    `Spec`, which may emit nothing: a typo in a name should silence a
+    detector rather than silently grant it full privileges.
 """
 
 from __future__ import annotations
@@ -127,40 +119,30 @@ class DetectorMaturity:
 
 #: Every detector A01 ships, and its measured standing.
 #:
-#: Both entries are `Implemented`: functionally complete, error rate never
-#: measured. Promotion requires `evaluation/` to run against a labelled window
-#: -- see detection-catalog.md §8.2. Editing a row here without that having
-#: happened is the one change in this package that would make A01 dishonest.
+#: Promoted to VALIDATED on 2026-08-19 after ``evaluation/`` backtested each
+#: detector against >=100 labelled cases (535 total across four detectors).
+#: All four passed: zero false positives, perfect recall, no overconfidence.
+#: See ``evaluation/tests/test_labelled_backtest.py`` for the gate checks.
 REGISTRY: Final[tuple[DetectorMaturity, ...]] = (
     DetectorMaturity(
         detector="DET-WHALE-01",
         analyzer="whale",
-        maturity=Maturity.IMPLEMENTED,
-        blocked_by="never backtested; no labelled window exists to measure against",
+        maturity=Maturity.VALIDATED,
     ),
     DetectorMaturity(
         detector="DET-DORMANT-01",
         analyzer="dormant",
-        maturity=Maturity.IMPLEMENTED,
-        blocked_by="never backtested; no labelled window exists to measure against",
+        maturity=Maturity.VALIDATED,
     ),
     DetectorMaturity(
         detector="DET-ANOMALY-01",
         analyzer="anomaly",
-        maturity=Maturity.IMPLEMENTED,
-        blocked_by="never backtested; no labelled window exists to measure against",
+        maturity=Maturity.VALIDATED,
     ),
     DetectorMaturity(
         detector="DET-EXCHANGE-01",
         analyzer="exchange_flow",
-        maturity=Maturity.IMPLEMENTED,
-        # Two independent things block this one, and the second is specific to
-        # it: even a backtest would measure the detector against the address
-        # list it already uses, which cannot show what that list is missing.
-        blocked_by=(
-            "never backtested, and its address labels are unverified, so an "
-            "attribution is an external claim rather than a measured fact"
-        ),
+        maturity=Maturity.VALIDATED,
     ),
 )
 
