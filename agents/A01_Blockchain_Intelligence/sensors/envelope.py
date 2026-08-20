@@ -76,6 +76,8 @@ class RecordKind(StrEnum):
     RECEIPT = "receipt"
     #: A balance snapshot — native or token.
     BALANCE = "balance"
+    #: A USD spot price from a market-data provider.
+    PRICE = "price"
 
 
 def content_id(chain: str, kind: RecordKind | str, payload: Any) -> str:

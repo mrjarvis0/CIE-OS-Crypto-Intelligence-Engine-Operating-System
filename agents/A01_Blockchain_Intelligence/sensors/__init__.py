@@ -45,13 +45,25 @@ from .evm.rpc_sensor import (
     parse_quantity,
     to_quantity,
 )
+from .market.price_sensor import (
+    DEFAULT_CACHE_TTL,
+    DEFILLAMA_COINS_BASE,
+    HttpMarketClient,
+    MarketResponse,
+    PriceFeedSensor,
+)
 from .registry import SensorRegistry, default_registry
 
 __all__ = [
+    "DEFAULT_CACHE_TTL",
     "DEFAULT_LOG_RANGE",
+    "DEFILLAMA_COINS_BASE",
     "Capability",
     "CaptureGap",
     "EvmRpcSensor",
+    "HttpMarketClient",
+    "MarketResponse",
+    "PriceFeedSensor",
     "Provenance",
     "RawRecord",
     "RecordKind",
