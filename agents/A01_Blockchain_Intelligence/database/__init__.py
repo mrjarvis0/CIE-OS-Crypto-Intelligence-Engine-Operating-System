@@ -52,6 +52,7 @@ from .analytics import (
     SqliteAnalyticsRepository,
     TransferRecord,
 )
+from .approvals import ApprovalWriteOutcome, SqliteApprovalRepository
 from .connection import BUSY_TIMEOUT, MEMORY, Database, DatabaseError
 from .migrations import (
     CURRENT_VERSION,
@@ -77,6 +78,7 @@ __all__ = [
     "MEMORY",
     "MIGRATIONS",
     "AddressSummary",
+    "ApprovalWriteOutcome",
     "BlockRepository",
     "Database",
     "DatabaseError",
@@ -86,6 +88,7 @@ __all__ = [
     "Migration",
     "RecordWriter",
     "SqliteAnalyticsRepository",
+    "SqliteApprovalRepository",
     "SqliteBlockRepository",
     "SqliteTokenRepository",
     "TokenWriteOutcome",

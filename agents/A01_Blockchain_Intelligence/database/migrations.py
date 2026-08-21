@@ -638,6 +638,97 @@ MIGRATIONS = (
     ),
 )
 
+#: One decoded approval event, so that approval-risk screening can run against
+#: stored data rather than only against a log batch held in memory.
+#:
+#: A separate table from ``token_transfers``, not a flag on it, because an
+#: approval is a different fact with a different shape: it moves nothing, it is
+#: replaced rather than accumulated, and each of the three standards keys a
+#: grant differently. Folding it into transfer flow is exactly what
+#: ``contracts/events.py`` refuses to do -- an approval counted as a transfer
+#: inflates every total it touches.
+#:
+#: ``kind`` is one of ``erc20_approval``, ``erc721_approval``,
+#: ``erc721_approval_for_all``. The three do not share a payload: ``allowance``
+#: is set for ERC-20 only, ``token_id`` for the per-token ERC-721 form only, and
+#: ``approved`` for ``setApprovalForAll`` only. Each is NULL elsewhere rather
+#: than defaulted, because a defaulted zero allowance reads as a revocation and
+#: would put a live grant on the books as withdrawn.
+#:
+#: ``allowance`` is zero-padded TEXT for the same reason every amount column is:
+#: an ERC-20 allowance is a uint256, routinely ``type(uint256).max``, which no
+#: 64-bit INTEGER can hold. ``token_id`` is TEXT because it is a 256-bit
+#: identifier, and a truncated one names a different NFT. ``is_revocation`` is
+#: derived at decode time and stored so a screen can exclude withdrawals without
+#: re-deriving each standard's revocation rule in SQL.
+#:
+#: Keyed on ``chain:tx_hash:log_index`` and cascaded from ``blocks`` exactly as
+#: ``token_transfers`` is: a replayed block re-emits identical logs, so the write
+#: is idempotent, and a reorg that withdraws the block removes its approvals with
+#: it rather than leaving a grant attached to a history that no longer exists.
+_V8_APPROVALS: Final[str] = """
+CREATE TABLE IF NOT EXISTS approvals (
+    key             TEXT    PRIMARY KEY,   -- chain:tx_hash:log_index
+    chain           TEXT    NOT NULL,
+    tx_hash         TEXT    NOT NULL,
+    log_index       INTEGER NOT NULL,
+    block_key       TEXT    NOT NULL,
+    block_number    INTEGER NOT NULL,
+    -- erc20_approval | erc721_approval | erc721_approval_for_all
+    kind            TEXT    NOT NULL,
+    -- The token or collection contract that emitted the event.
+    token           TEXT    NOT NULL,
+    owner           TEXT    NOT NULL,
+    -- The spender (ERC-20), the approved address (ERC-721, zero on revoke), or
+    -- the operator (ApprovalForAll). Always topic[2], whatever the standard.
+    spender         TEXT    NOT NULL,
+    -- Zero-padded decimal, ERC-20 only; NULL for the two ERC-721 forms.
+    allowance       TEXT,
+    -- uint256 as text, ERC-721 per-token only; NULL otherwise.
+    token_id        TEXT,
+    -- 0/1, setApprovalForAll only; NULL otherwise.
+    approved        INTEGER,
+    -- Derived at decode time. Each standard revokes differently, so storing the
+    -- verdict keeps the exclusion out of every query that reads this table.
+    is_revocation   INTEGER NOT NULL DEFAULT 0,
+    -- A log carries no timestamp; this is set only when the caller joined the
+    -- block, and stays NULL otherwise rather than being filled with read time --
+    -- which would make every approval look freshly granted.
+    block_timestamp REAL,
+    source_record_id TEXT   NOT NULL DEFAULT '',
+    FOREIGN KEY (block_key) REFERENCES blocks (key) ON DELETE CASCADE
+)
+"""
+
+MIGRATIONS = (
+    *MIGRATIONS,
+    Migration(
+        version=8,
+        name="approvals",
+        statements=(
+            _V8_APPROVALS,
+            # Withdrawal cascade and per-block reads, as token_transfers has.
+            """
+            CREATE INDEX IF NOT EXISTS idx_approvals_block
+                ON approvals (block_key)
+            """,
+            # The exposure query: every live grant an owner has, newest first,
+            # replayed into current state. This is the read this table exists to
+            # serve, so it is the index that has to exist.
+            """
+            CREATE INDEX IF NOT EXISTS idx_approvals_owner
+                ON approvals (chain, owner, block_number DESC, log_index DESC)
+            """,
+            # "Who did this token grant to", the reverse lookup a token-level
+            # screen runs.
+            """
+            CREATE INDEX IF NOT EXISTS idx_approvals_token
+                ON approvals (chain, token, block_number DESC)
+            """,
+        ),
+    ),
+)
+
 #: The version a fresh database is brought to.
 CURRENT_VERSION: Final[int] = max(m.version for m in MIGRATIONS)
 
