@@ -15,14 +15,16 @@ from __future__ import annotations
 
 import fnmatch
 import ipaddress
-from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 from ..utils.paths import is_under
 
 __all__ = [
+    "DEFAULT_BLOCKED_HOSTS",
     "IsolationError",
     "IsolationPolicy",
+    "SandboxSpec",
     "restrict_path",
     "can_use_capability",
     "host_allowed",
@@ -34,16 +36,40 @@ class IsolationError(ValueError):
     """Raised when program attempts to cross an isolation boundary."""
 
 
-@dataclass
+#: Hosts a sandbox may never dial, whatever its allow-list says.
+#:
+#: The previous default was ``["127.0.0.1", "localhost"]``, which named two
+#: spellings of loopback and missed every other one. ``::1`` is loopback,
+#: ``0.0.0.0`` routes to local on most stacks, and ``169.254.169.254`` is the
+#: cloud instance-metadata endpoint -- the single most valuable SSRF target on
+#: a deployed host, and A01 deploys to one.
+DEFAULT_BLOCKED_HOSTS: tuple = (
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "localhost",
+    "*.localhost",
+    "169.254.169.254",
+    "metadata.google.internal",
+    "metadata",
+)
+
+
+@dataclass(frozen=True)
 class IsolationPolicy:
     """
-    Declarative description of what sandboxed code "used to" be able to do.
+    Declarative description of what sandboxed code may do.
+
+    Frozen, and the sequence fields are normalised to tuples. A policy is
+    handed to a sandbox and then consulted repeatedly; when it was a mutable
+    dataclass holding mutable lists, anything holding a reference could widen
+    it after the decision to trust it had been made, and no reader could tell
+    a policy had changed under it.
 
     Parameters
     ----------
     allowed_capabilities:
-        Capability names (schema vocabulary). Empty set means deny-all
-        capabilities are not automatically granted.
+        Capability names (schema vocabulary). Empty means deny-all.
     file_roots:
         Absolute directories the tool may read/write. Empty means deny-all.
     hosts:
@@ -53,12 +79,18 @@ class IsolationPolicy:
         Deny-list patterns that always win over ``hosts``.
     """
 
-    allowed_capabilities: list = field(default_factory=list)
-    file_roots: list = field(default_factory=list)
-    hosts: list = field(default_factory=list)
-    block_hosts: list = field(default_factory=lambda: ["127.0.0.1", "localhost"])
+    allowed_capabilities: tuple = ()
+    file_roots: tuple = ()
+    hosts: tuple = ()
+    block_hosts: tuple = DEFAULT_BLOCKED_HOSTS
     allow_any_network: bool = False
     timeout: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        for name in ("allowed_capabilities", "file_roots", "hosts", "block_hosts"):
+            value = getattr(self, name)
+            if not isinstance(value, tuple):
+                object.__setattr__(self, name, tuple(value))
 
     def allows_capability(self, capability: str) -> bool:
         if not self.allowed_capabilities:
@@ -101,15 +133,29 @@ def _match_host(pattern: str, host: str) -> bool:
     )
 
 
-def host_allowed(policy: IsolationPolicy, host: str) -> bool:
-    """Decision helper: may this sandbox dial ``host``?"""
+def host_allowed(
+    policy: IsolationPolicy, host: str, *, allow_private: bool = False
+) -> bool:
+    """
+    Decision helper: may this sandbox dial ``host``?
+
+    :func:`restrict_ip` is applied here rather than left to the caller.
+    The two checks used to be independent functions, and a caller that
+    consulted only this one would happily dial ``10.0.0.5`` or
+    ``169.254.169.254`` whenever ``allow_any_network`` was set. A guard that
+    depends on remembering to call a second guard is not one.
+    """
     for blocked in policy.block_hosts:
         if _match_host(blocked, host):
             return False
-    if not policy.hosts and not policy.allow_any_network:
+
+    if not restrict_ip(host, allow_private=allow_private):
         return False
+
     if policy.allow_any_network:
         return True
+    if not policy.hosts:
+        return False
     return any(_match_host(allowed, host) for allowed in policy.hosts)
 
 

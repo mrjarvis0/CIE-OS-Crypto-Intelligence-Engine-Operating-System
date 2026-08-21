@@ -40,6 +40,10 @@ __package_name__ = "core"
 # ============================================================================
 
 from .agent import BaseAgent
+from .blockchain_agent import (
+    BlockchainAgent,
+    blockchain_agent_config,
+)
 from .context import AgentContext
 from .lifecycle import AgentLifecycle, LifecycleState
 from .runtime import AgentRuntime
@@ -82,6 +86,8 @@ __all__ = [
 
     # Core
     "BaseAgent",
+    "BlockchainAgent",
+    "blockchain_agent_config",
     "AgentRuntime",
     "AgentContext",
     "AgentLifecycle",

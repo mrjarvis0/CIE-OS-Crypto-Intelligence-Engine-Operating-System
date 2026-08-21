@@ -4,18 +4,21 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[all]"
+RUN pip install --no-cache-dir "."
 
 COPY . .
 
 ENV PYTHONPATH=/app
-ENV A01_ENVIRONMENT=production
+ENV APP_ENV=production
+
+EXPOSE 8801
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD python -c "from config.constants import PROJECT_NAME; print(PROJECT_NAME)"
+    CMD curl -f http://localhost:8801/health || exit 1
 
 ENTRYPOINT ["python", "-m", "cli.main"]
-CMD ["doctor"]
+CMD ["serve", "--host", "0.0.0.0", "--port", "8801"]

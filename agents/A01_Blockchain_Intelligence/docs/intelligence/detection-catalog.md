@@ -234,7 +234,27 @@ incident response, and should be scoped honestly as such.
 | --- | --- |
 | **Signal** | Protocol TVL drop far beyond its historical volatility, in a short window |
 | **Thresholds** | `outflow_fraction ≥ 0.30` within `≤ 3` blocks, **and** `z_score ≥ 6` against 90d volatility |
-| **Maturity** | `spec` |
+| **Maturity** | `implemented` — built 2026-08-20, capped at 0.60, may not alert |
+
+**Built at** `blockchain/security/exploit_detection/outflow.py` (measurement)
+and `intelligence/analysis/exploit.py` (judgement).
+
+**The z-score is read against a robust estimator, and that is a deliberate
+departure from the line above.** Measured against the mean and standard
+deviation, `z ≥ 6` is self-defeating: one prior drain inside the baseline
+inflates the standard deviation enough to hide the next one. On a 598-window
+simulated series, contamination by a single earlier drain cost the classical
+z-score 11.8× of its separation (200.5 → 17.1) against 4.1× for the modified
+z-score (420.4 → 103.7). The gate therefore reads the median absolute
+deviation rescaled by 0.6745, falling back to the mean absolute deviation
+when the MAD collapses to zero. Both scores are reported, so the difference
+is visible rather than buried in a choice of estimator.
+
+**Two additional refusals the spec did not name.** A baseline shorter than 30
+windows returns `INSUFFICIENT_BASELINE` rather than a z-score computed from
+noise; a window whose preceding reserve is unknown returns
+`UNKNOWN_RESERVE`. Neither is reported as "no anomaly" — §2 forbids
+collapsing an absence into a negative.
 
 **Why this complements DET-EXPLOIT-01.** It is mechanism-agnostic. It cannot
 tell you *how*, but it catches novel exploit classes that signature-based
@@ -361,18 +381,31 @@ without one is the single change in the codebase that would make A01 dishonest.
 | DET-MEV-01 | ✅ | ❌ | No MEV module exists |
 | DET-ARB-01 | ✅ | ❌ | Not started |
 | DET-EXPLOIT-01 | ✅ | ❌ | `intelligence/analysis/contract.py` is a stub |
-| DET-EXPLOIT-02 | ✅ | ❌ | Not started |
+| DET-EXPLOIT-02 | ✅ | ✅ `outflow.py` + `exploit.py` | No labelled drain corpus; no suppression calendar; reserve history too shallow to run live |
 | DET-RUG-01 | ✅ | ❌ | Not started |
 | DET-BRIDGE-01 | ✅ | ⚠️ `bridge.py` + `bridge_linking.py`, both stubs | No event registry, no tiering |
 
 `✅` in the Code column means the detector is functionally complete and
 registered in `intelligence/core/stages.py` — reachable via `python -m cli
-detectors`. It does **not** mean validated: per §7.3 both implemented
-detectors still carry an `unmeasured` error rate and are capped at 0.60
-confidence.
+detectors`. It does **not** mean validated.
+
+Four detectors were promoted on 2026-08-19 after backtesting against 535
+labelled cases. DET-EXPLOIT-02 was not, and is the clearest illustration of
+what the distinction is for: it is finished, tested and calibrated, and it
+has no measured error rate, because no labelled corpus of protocol drains
+exists to measure one against. Per §7.3 it is therefore capped at 0.60 and
+may not alert. Calibration against a generated series says the arithmetic
+behaves; it says nothing about how often the detector is right.
 
 ## 8.1 Completed
 
+0. **Backtesting, and four promotions.** The labelled corpus landed
+   2026-08-19: 535 cases, ≥100 per detector. DET-WHALE-01, DET-DORMANT-01,
+   DET-ANOMALY-01 and DET-EXCHANGE-01 all passed with zero false positives
+   and perfect recall, and were promoted to `validated` — full confidence,
+   alerting permitted.
+0. **DET-EXPLOIT-02** — built 2026-08-20, mechanism-agnostic, no signature
+   maintenance burden. Held at `implemented` for want of an error rate.
 1. **DET-DORMANT-01** — dormancy window (365d default) plus a balance
    materiality floor at the 99th percentile, reported in dormancy bands.
 2. **DET-WHALE-01 rebuild** — the absolute `threshold = 1000` is gone.
@@ -384,15 +417,27 @@ confidence.
 
 ## 8.2 Remaining, by value-to-effort
 
-1. **Backtest the two implemented detectors.** The `evaluation/` harness now
-   exists (`Backtest`, `ClassificationMetrics`, `calibration`); what is missing
-   is a labelled historical window to run it against. Until that lands, A01 has
-   zero validated detectors, so this outranks building the third one.
-2. **DET-EXPLOIT-02** — mechanism-agnostic, catches novel classes, no signature
-   maintenance burden.
-3. **DET-BRIDGE-01 Tier A** — unlocks cross-chain, deterministic, defensible.
-4. **DET-RUG-01 indicators** — high user demand; ship as indicators only.
-5. **DET-EXPLOIT-01**, **DET-ARB-01**, **DET-MEV-01** — highest complexity,
+*Items 1 and 2 of the previous list are done and are recorded in §8.1.*
+
+1. **Feed DET-EXPLOIT-02 real data.** The detector is built; nothing reaches
+   it. It needs 90 days of per-protocol reserve history to have a baseline at
+   all, and A01 holds 77 ethereum blocks. Every live verdict today returns
+   `INSUFFICIENT_BASELINE`, correctly. This outranks building a sixth
+   detector, for the same reason backtesting outranked building a third.
+2. **A known-events calendar.** Scheduled unlocks, migrations,
+   governance-approved treasury moves and mass unstaking are the four benign
+   explanations for a large outflow, and all four are announced in advance.
+   `SuppressionCalendar` accepts them and A01 ingests none. Its absence is
+   the second blocker on DET-EXPLOIT-02's registry entry, and it is also what
+   mutes anomaly detectors everywhere else.
+3. **Approval log capture.** `blockchain/security/approval_risk` decodes
+   ERC-20, ERC-721 and `ApprovalForAll` grants and replays them into a live
+   exposure set. There is no approvals table and `contracts/events.py`
+   refuses approval logs as non-transfers, so the decoder has nothing to
+   read. Schema work.
+4. **DET-BRIDGE-01 Tier A** — unlocks cross-chain, deterministic, defensible.
+5. **DET-RUG-01 indicators** — high user demand; ship as indicators only.
+6. **DET-EXPLOIT-01**, **DET-ARB-01**, **DET-MEV-01** — highest complexity,
    and MEV specifically has a decaying signal.
 
 ---

@@ -27,6 +27,10 @@ __all__ = [
     "reject_dangerous",
     "guard",
     "ValidatorRule",
+    "validate_signature",
+    "required_field",
+    "length",
+    "allowed",
 ]
 
 
@@ -67,7 +71,10 @@ def validate_length(value: Any, *, minimum: int = 0, maximum: int = 2**20) -> Op
     """Direct length check; returns an error message or ``None``."""
     if value is None:
         return None
-    size = len(value)
+    try:
+        size = len(value)
+    except TypeError:
+        return f"has no length: {type(value).__name__}"
     if size < minimum:
         return f"shorter than minimum {minimum}"
     if size > maximum:
@@ -103,7 +110,10 @@ def length(minimum: int = 0, maximum: int = 2**20) -> ValidatorRule:
     def _check(value: Any) -> Optional[str]:
         if value is None:
             return None
-        size = len(value)
+        try:
+            size = len(value)
+        except TypeError:
+            return f"has no length: {type(value).__name__}"
         if size < minimum:
             return f"shorter than minimum {minimum}"
         if size > maximum:
@@ -124,9 +134,17 @@ def allowed(values: Sequence[Any]) -> ValidatorRule:
     return _check
 
 
+#: A denylist, and denylists are bypassable by construction. This one is a
+#: tripwire for obviously hostile input, **not** the defence against SQL
+#: injection -- that is parameterised queries, which is what
+#: database/repositories.py uses throughout. Nothing here should ever be
+#: read as permission to interpolate a value into a query.
 _DANGEROUS_PATTERNS = (
     re.compile(r"</?\s*(script|iframe|object|embed)[^>]*>", re.IGNORECASE),
     re.compile(r"\b(?:ALTER|DROP|exec\s*\()\b", re.IGNORECASE),
+    re.compile(r"\bUNION\s+(?:ALL\s+)?SELECT\b", re.IGNORECASE),
+    re.compile(r"\bTRUNCATE\b", re.IGNORECASE),
+    re.compile(r"javascript:", re.IGNORECASE),
 )
 
 
@@ -166,15 +184,24 @@ def validate_signature(
 
 def guard(data: Mapping[str, Any], *, rules: Sequence[ValidatorRule] = ()) -> None:
     """
-    Raise :class:`ValidatorError` on first failure across ``rules``.
+    Apply every rule to every field of ``data``; raise on any failure.
 
-    Intended for hard security gateways where a failure is fatal.
+    Each rule used to be handed the whole mapping. Rules are written against
+    field *values* -- :func:`reject_dangerous` opens with
+    ``isinstance(value, str)`` -- so every rule saw a ``dict``, returned
+    ``None``, and the gate passed everything. A payload carrying a script tag
+    and a DROP statement went through a "hard security gateway" without one
+    rule ever looking at it.
+
+    Rules that genuinely need the whole mapping belong in
+    :func:`validate_signature`, which is shaped for that.
     """
     report = ValidationReport()
     for rule in rules:
-        message = rule(data)
-        if message:
-            report.fail(message)
+        for field_name, value in data.items():
+            message = rule(value)
+            if message:
+                report.fail(f"{field_name}: {message}")
     if not report.ok:
         raise ValidatorError(report.merged())
 

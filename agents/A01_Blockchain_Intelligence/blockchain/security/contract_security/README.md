@@ -4,7 +4,7 @@
 
 **Not built yet.**
 
-Blocked by: Exploit, rug-pull and approval-risk screening. Needs contract bytecode analysis and event decoding beyond transfers; the detector specs are in docs/intelligence/detection-catalog.md.
+Blocked by: Contract-level screening: rug-pull indicators, vulnerability surface, RPC-provider behaviour. Needs contract bytecode analysis and an ABI source, neither of which A01 ingests -- `contracts/` reads logs by shape and cannot read what a contract is able to do. Specs in docs/intelligence/detection-catalog.md.
 
 The directory is kept because the structure is the roadmap. It will
 hold code once the capability above exists — not before, because a

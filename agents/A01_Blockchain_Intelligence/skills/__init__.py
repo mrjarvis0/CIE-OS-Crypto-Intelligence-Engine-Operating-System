@@ -28,9 +28,9 @@ number itself shows no difference. A skill therefore consults
 happen, and withholds the field otherwise so the detector above reports "not
 determinable" instead of a confident error.
 
-Four skills are implemented. The other fifteen folders are a plan, and
-:data:`skills.registry.PLANNED_SKILLS` records what each is waiting on rather
-than leaving the absence unexplained.
+All nineteen skills are implemented. Each is registered as LIMITED and states
+what it cannot see. :func:`skills.registry.default_registry` returns the full
+set.
 """
 
 from __future__ import annotations
@@ -49,23 +49,53 @@ from .registry import (
     SkillRegistry,
     default_registry,
 )
+from .bridge import BridgeSkill
+from .cross_chain import CrossChainSkill
+from .defi import DefiSkill
+from .developer_activity import DeveloperActivitySkill
 from .exchange_flow import ExchangeFlowSkill
+from .governance import GovernanceSkill
+from .mining import MiningSkill
+from .network_health import NetworkHealthSkill
+from .nft import NftSkill
+from .security import SecuritySkill
+from .smart_contract import SmartContractSkill
+from .smart_money import SmartMoneySkill
+from .stablecoin import StablecoinSkill
+from .staking import StakingSkill
 from .token_flow import TokenFlowSkill
+from .token_unlock import TokenUnlockSkill
+from .validator import ValidatorSkill
 from .wallet_lookup import WalletProfileSkill
 from .whale_detection import WhaleTransferSkill
 
 __all__ = [
     "MIN_BLOCKS_FOR_ABSENCE",
     "PLANNED_SKILLS",
+    "BridgeSkill",
     "Coverage",
+    "CrossChainSkill",
+    "DefiSkill",
+    "DeveloperActivitySkill",
     "ExchangeFlowSkill",
+    "GovernanceSkill",
+    "MiningSkill",
+    "NetworkHealthSkill",
+    "NftSkill",
     "Readiness",
+    "SecuritySkill",
     "Skill",
     "SkillEntry",
     "SkillRegistry",
     "SkillRequest",
     "SkillResult",
+    "SmartContractSkill",
+    "SmartMoneySkill",
+    "StablecoinSkill",
+    "StakingSkill",
     "TokenFlowSkill",
+    "TokenUnlockSkill",
+    "ValidatorSkill",
     "WalletProfileSkill",
     "WhaleTransferSkill",
     "default_registry",

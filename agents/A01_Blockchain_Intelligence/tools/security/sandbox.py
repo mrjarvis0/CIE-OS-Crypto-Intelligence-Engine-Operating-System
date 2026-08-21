@@ -1,41 +1,94 @@
 """
 Tools :: Security :: Sandbox
-============================
 
-Process-level sandbox for running untrusted code paths (plugins, scripts,
-tools) with resource limits and filesystem isolation.
+Subprocess runner for untrusted code paths (plugins, scripts, tools), with a
+time budget, a confined working directory and a scrubbed environment.
 
-Implementation notes
---------------------
-The platform is stdlib-only by design, so this sandbox uses a subprocess with:
+What this actually enforces
+---------------------------
+* **A time budget.** The child is killed when it overruns.
+* **A working directory** under one of the policy's ``file_roots``.
+* **An environment allow-list.** The child sees a named set of variables and
+  nothing else.
 
-* a working directory confined to a temp root;
-* a time budget enforced via a watchdog;
-* environment scrubbing (no host secrets injected);
-* an optional filesystem jail: the child receives read access to the allowed
-  roots via explicit arguments, not ambient host mounts.
+What it does **not** enforce -- read this before trusting it
+------------------------------------------------------------
+The child is an ordinary OS process. It can read and write any path its user
+can reach, and it can open any socket. ``cwd`` sets where relative paths
+start; it is not a jail. So ``IsolationPolicy.file_roots`` and ``.hosts``
+constrain *this module's own* decisions -- which directory it creates, what
+:func:`~tools.security.isolation.host_allowed` answers -- and they do not
+constrain the child.
 
-This is a *best-effort* isolation layer for automation environments; for
-harder guarantees, deployment should run the whole platform inside a
-container. The API stays identical either way.
+The module docstring previously said the child "receives read access to the
+allowed roots via explicit arguments", which described an argument this code
+never passed. A reader who believed it would have handed untrusted code to a
+sandbox that was not one. For a real boundary, run the platform inside a
+container or a user namespace; the API here stays identical either way.
+
+Environment scrubbing is an **allow-list**
+------------------------------------------
+It used to be a deny-list: drop any variable whose name contains "secret",
+"token", "key", "password" or "credential". That misses the shape secrets
+actually take on this project -- ``ALCHEMY_URL`` and ``DATABASE_URL`` carry
+credentials inside the URL and match none of those words. A deny-list over
+names an attacker or an operator chooses is not a boundary, so the child now
+receives only what a Python process needs to start.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, Dict, Final, FrozenSet, List, Mapping, Optional, Sequence
 
 from .isolation import IsolationPolicy
 
-__all__ = ["SandboxResult", "Sandbox", "run_sandboxed", "SandboxError"]
+__all__ = [
+    "SandboxResult",
+    "Sandbox",
+    "run_sandboxed",
+    "SandboxError",
+    "BASE_ENV_ALLOWLIST",
+]
+
+#: Environment variables a child is allowed to inherit.
+#:
+#: Chosen as the minimum a Python interpreter needs to start on Windows and
+#: POSIX. Anything not named here is dropped, including every variable this
+#: project uses to carry a provider credential.
+BASE_ENV_ALLOWLIST: Final[FrozenSet[str]] = frozenset(
+    {
+        # POSIX
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TMPDIR",
+        # Windows
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "TEMP",
+        "TMP",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        # Python, behaviour-only. PYTHONPATH is deliberately absent: it would
+        # let the parent's import path decide what the child executes.
+        "PYTHONIOENCODING",
+        "PYTHONUTF8",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONHASHSEED",
+    }
+)
 
 
 class SandboxError(RuntimeError):
@@ -100,16 +153,37 @@ class Sandbox:
         os.makedirs(base, exist_ok=True)
         return tempfile.mkdtemp(prefix="sandbox-", dir=base)
 
+    def _resolved_workdir(self) -> str:
+        """
+        The working directory, checked against the policy when one is set.
+
+        An explicit ``workdir`` outside every allowed root is refused rather
+        than used: the caller asked for a confinement and named a directory
+        outside it, and silently honouring the second would discard the first.
+        """
+        if self._workdir is None:
+            return self._temp_workdir()
+
+        if self.policy.file_roots and not self.policy.allows_path(self._workdir):
+            raise SandboxError(
+                f"workdir {self._workdir!r} is outside the policy's file_roots"
+            )
+        return self._workdir
+
     def _scrubbed_env(self) -> Dict[str, str]:
-        """Copy of host env minus known secret keys."""
-        scrubbed = {}
-        for key, value in os.environ.items():
-            lowered = key.lower()
-            if any(term in lowered for term in ("secret", "token", "key", "password", "credential")):
-                continue
-            scrubbed[key] = value
-        for key, value in self.env.items():
-            scrubbed[key] = value
+        """
+        The child's environment: the allow-list, plus explicit additions.
+
+        Variables passed as ``env=`` to the constructor are the caller's
+        deliberate choice and are always included -- that is the supported way
+        to hand the child something it needs.
+        """
+        scrubbed = {
+            key: value
+            for key, value in os.environ.items()
+            if key.upper() in BASE_ENV_ALLOWLIST
+        }
+        scrubbed.update(self.env)
         return scrubbed
 
     # -- execution --------------------------------------------------------- #
@@ -122,7 +196,7 @@ class Sandbox:
             argv: List[str] = [self.python, "-c", command]
         else:
             argv = list(command)
-        workdir = self._workdir or self._temp_workdir()
+        workdir = self._resolved_workdir()
 
         try:
             process = subprocess.Popen(

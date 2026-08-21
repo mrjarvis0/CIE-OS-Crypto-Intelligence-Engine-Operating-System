@@ -111,62 +111,33 @@ PLACEMENT: Final[tuple[Placement, ...]] = (
         ),
     ),
     # -- top-level duplicates of a layer package ------------------------------
-    Placement(
-        "api",
-        State.IMPLEMENTED,
-        "interfaces/rest.py",
-        "HTTP surface. Read-only, GET-only, loopback-bound by default.",
-    ),
-    Placement(
-        "monitoring",
-        State.IMPLEMENTED,
-        "telemetry/metrics.py",
-        "Metrics with bounded label cardinality, including the honesty gauges.",
-    ),
-    Placement(
-        "reasoning",
-        State.IMPLEMENTED,
-        "intelligence/reasoning",
-        "Reasoning strategies. The layer-level package wins (folder-architecture §11).",
-    ),
-    Placement(
-        "reporting",
-        State.IMPLEMENTED,
-        "intelligence/reporting",
-        "Report rendering. The layer-level package wins (folder-architecture §11).",
-    ),
-    Placement(
-        "security",
-        State.IMPLEMENTED,
-        "config/security",
-        "Secrets, validation and API keys; sandboxed execution is tools/security.",
-    ),
+    #
+    # These eight are gone from the table because they stopped being empty.
+    # `api/`, `monitoring/`, `models/`, `plugins/`, `reasoning/`,
+    # `reporting/`, `security/` and `workflows/` are now redirect packages:
+    # each binds the canonical module object itself and forwards every other
+    # name to it live, so `api.rest is interfaces.rest`.
+    #
+    # That is the same claim their generated READMEs used to make, moved
+    # somewhere the interpreter checks it. A rename now breaks an import
+    # rather than stranding a reader, and `tools/security/tests` asserts the
+    # identity so a future re-implementation inside one of those directories
+    # fails a test instead of quietly becoming a second copy.
+    #
+    # `sandbox/` stays in the table above, and stays empty. It is the one
+    # directory where a redirect would be wrong: there is nothing to redirect
+    # to, and code placed there ships by accident.
+    #
+    # `security/retrieval/` keeps its pointer, and is the one case where the
+    # redirect treatment would mislead. Its target is `memory/retrieval` --
+    # retrieval filtering and ranking, which is not a security control at all.
+    # Binding it as `security.retrieval` would assert a relationship the code
+    # does not have; the note says where the concept lives and stops there.
     Placement(
         "security/retrieval",
         State.IMPLEMENTED,
         "memory/retrieval",
         "Retrieval filtering and ranking.",
-    ),
-    Placement(
-        "plugins",
-        State.IMPLEMENTED,
-        "tools/plugins",
-        "Plugin loading and the marketplace surface.",
-    ),
-    Placement(
-        "models",
-        State.IMPLEMENTED,
-        "intelligence/narrative/provider.py",
-        (
-            "The model seam. No model is configured; narratives are composed "
-            "deterministically and prompt safety lives in prompts/."
-        ),
-    ),
-    Placement(
-        "workflows",
-        State.IMPLEMENTED,
-        "planning",
-        "Goal, task and execution orchestration.",
     ),
     # -- filled by this change ------------------------------------------------
     Placement(
@@ -296,13 +267,21 @@ PLACEMENT: Final[tuple[Placement, ...]] = (
         "telemetry/metrics.py",
         "Ingestion counters, lag and data-quality gauges.",
     ),
+    # `exploit_detection` and `approval_risk` are built and are therefore not
+    # listed: this table covers directories with no code. What is left under
+    # `blockchain/security/` still needs contract bytecode analysis, which is
+    # a narrower blocker than the one this entry used to state -- the original
+    # wording also blamed "event decoding beyond transfers", and `contracts/`
+    # has decoded Approval and ApprovalForAll since the contracts layer landed.
     Placement(
         "blockchain/security/*",
         State.PLANNED,
         note=(
-            "Exploit, rug-pull and approval-risk screening. Needs contract "
-            "bytecode analysis and event decoding beyond transfers; the "
-            "detector specs are in docs/intelligence/detection-catalog.md."
+            "Contract-level screening: rug-pull indicators, vulnerability "
+            "surface, RPC-provider behaviour. Needs contract bytecode "
+            "analysis and an ABI source, neither of which A01 ingests -- "
+            "`contracts/` reads logs by shape and cannot read what a contract "
+            "is able to do. Specs in docs/intelligence/detection-catalog.md."
         ),
     ),
     Placement(
@@ -457,6 +436,35 @@ def relative(path: Path, root: Path | None = None) -> str:
     return path.relative_to(root or ROOT).as_posix()
 
 
+def generated_orphans(root: Path | None = None) -> tuple[Path, ...]:
+    """
+    Generated READMEs left behind in directories that have since gained code.
+
+    The failure this catches runs the opposite way from a stale pointer. A
+    pointer rots when its *target* moves; an orphan rots when the directory
+    itself fills in. ``skills/smart_money/`` was empty and said "Not built
+    yet"; the skill was then built and the note stayed, so the directory
+    shipped working code under a file denying it existed.
+
+    Neither :func:`generate` nor :func:`verify` could see it: both walk
+    :func:`empty_directories`, and the directory had stopped being empty --
+    the moment it stopped being scanned is the moment it started lying.
+    """
+    base = root or ROOT
+    found: list[Path] = []
+    for directory in base.rglob("*"):
+        if not directory.is_dir():
+            continue
+        if SKIP_PARTS & set(directory.relative_to(base).parts):
+            continue
+        if is_empty(directory):
+            continue
+        readme = directory / "README.md"
+        if readme.is_file() and GENERATED_MARKER in _read(readme):
+            found.append(readme)
+    return tuple(sorted(found))
+
+
 def resolve(relative_path: str) -> Placement | None:
     """The rule covering a directory, or None when the table has no answer."""
     for entry in PLACEMENT:
@@ -582,10 +590,13 @@ class Report:
     uncovered: tuple[str, ...] = ()
     missing_targets: tuple[tuple[str, str], ...] = ()
     unexplained: tuple[str, ...] = ()
+    orphans: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
-        return not (self.uncovered or self.missing_targets or self.unexplained)
+        return not (
+            self.uncovered or self.missing_targets or self.unexplained or self.orphans
+        )
 
     def describe(self) -> str:
         if self.ok:
@@ -606,6 +617,11 @@ class Report:
                 f"{len(self.unexplained)} planned directory(ies) with no reason: "
                 + ", ".join(self.unexplained[:5])
             )
+        if self.orphans:
+            parts.append(
+                f"{len(self.orphans)} generated README(s) describe a directory that "
+                "now holds code: " + ", ".join(self.orphans[:5])
+            )
         return "; ".join(parts)
 
 
@@ -613,9 +629,10 @@ def verify(root: Path | None = None) -> Report:
     """
     Check the table against the tree.
 
-    Three failures matter, and the second is the reason this exists: a pointer
-    whose target has been renamed is a README that lies, and without this check
-    nothing would ever notice.
+    Four failures matter, and two of them are the same failure seen from
+    opposite ends: a pointer whose target was renamed, and a note left behind
+    in a directory that has since been built. Both are READMEs that lie, and
+    without this check nothing would ever notice either one.
     """
     base = root or ROOT
     reasons = planned_reasons()
@@ -647,6 +664,7 @@ def verify(root: Path | None = None) -> Report:
         uncovered=tuple(uncovered),
         missing_targets=tuple(missing),
         unexplained=tuple(unexplained),
+        orphans=tuple(relative(p, base) for p in generated_orphans(base)),
     )
 
 
@@ -664,10 +682,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     verb = "wrote" if write else "would write"
     print(f"{verb} {len(produced)} README(s)")
 
+    # An orphan is removed rather than rewritten: the table has no entry for a
+    # directory that holds code, so there is nothing to regenerate it from.
+    orphans = generated_orphans()
+    if orphans:
+        removed = "removed" if write else "would remove"
+        print(f"{removed} {len(orphans)} orphaned README(s)")
+        if write:
+            for readme in orphans:
+                readme.unlink()
+
     if not write:
         print("re-run with --write to apply")
 
-    return 0 if report.ok else 1
+    return 0 if (report.ok or write) else 1
 
 
 if __name__ == "__main__":
@@ -683,6 +711,7 @@ __all__ = [
     "State",
     "empty_directories",
     "generate",
+    "generated_orphans",
     "is_empty",
     "planned_reasons",
     "resolve",

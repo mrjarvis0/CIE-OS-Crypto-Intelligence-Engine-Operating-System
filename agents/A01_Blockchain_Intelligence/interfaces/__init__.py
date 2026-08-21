@@ -47,6 +47,7 @@ rate-limited job behind an HTTP call.
 
 from __future__ import annotations
 
+from .agent import build_blockchain_agent
 from .rest import DEFAULT_HOST, DEFAULT_PORT, Router, build_server, serve
 from .service import IntelligenceService, ServiceResult
 
@@ -56,6 +57,7 @@ __all__ = [
     "IntelligenceService",
     "Router",
     "ServiceResult",
+    "build_blockchain_agent",
     "build_server",
     "serve",
 ]

@@ -547,24 +547,36 @@ def test_a_request_refuses_an_inverted_range():
 # REGISTRY
 # ==============================================================================
 
-def test_only_implemented_skills_are_registered():
+def test_all_nineteen_skills_are_registered():
     """
-    Fourteen folders hold a .gitkeep. Listing them would turn a plan into an
-    advertised capability.
-
-    ``exchange_flow`` joined this set when address labels became loadable, and
-    it is the only entry here whose answer depends on data A01 did not observe
-    itself -- which is why it is LIMITED and says so.
+    Every skill folder now holds an implementation. All are registered as
+    LIMITED, each stating what bounds its answer.
     """
     registry = default_registry()
 
+    assert len(registry) == 19
     assert set(registry.names()) == {
         "wallet_profile",
         "whale_transfers",
         "token_flow",
         "exchange_flow",
+        "smart_money",
+        "stablecoin",
+        "bridge",
+        "mining",
+        "security",
+        "smart_contract",
+        "nft",
+        "network_health",
+        "cross_chain",
+        "token_unlock",
+        "staking",
+        "validator",
+        "governance",
+        "defi",
+        "developer_activity",
     }
-    assert "exchange_flow" not in PLANNED_SKILLS
+    assert PLANNED_SKILLS == {}
 
 
 def test_every_registered_skill_declares_what_bounds_it():
@@ -574,23 +586,23 @@ def test_every_registered_skill_declares_what_bounds_it():
             assert entry.bounded_by, f"{entry.name} is limited but says by what"
 
 
-def test_unbuilt_skills_record_why():
-    """An unexplained absence is indistinguishable from an oversight."""
-    planned = default_registry().planned()
-
-    assert {e["name"] for e in planned} == set(PLANNED_SKILLS)
-    assert all(e["blocked_by"] for e in planned)
+def test_no_planned_skills_remain():
+    """Every skill is now implemented; the planned list is empty."""
+    assert PLANNED_SKILLS == {}
+    assert default_registry().planned() == ()
 
 
-def test_smart_money_is_not_registered():
+def test_smart_money_is_registered():
     """
-    It needs prices and entity labels A01 does not ingest. A ranking built
-    without them would order addresses by activity under the name of skill.
+    Smart money is now implemented with behavioral signals (first-mover timing,
+    counterparty diversity, size discipline) standing in for profitability.
     """
     registry = default_registry()
 
-    assert "smart_money" not in registry.names()
-    assert "smart_money" in PLANNED_SKILLS
+    assert "smart_money" in registry.names()
+    entry = registry.entry("smart_money")
+    assert entry.readiness is Readiness.LIMITED
+    assert "price feed" in entry.bounded_by
 
 
 def test_an_unknown_skill_names_what_is_available():

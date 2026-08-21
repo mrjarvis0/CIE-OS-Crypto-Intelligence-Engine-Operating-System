@@ -83,12 +83,31 @@ def test_evaluate_all_produces_four_verdicts():
 
 
 def test_evaluate_all_builds_promoted_registry():
+    """
+    Backtested detectors are promoted; un-backtested ones are left alone.
+
+    The second half is the part worth testing. ``run_all`` only covers
+    detectors with labelled cases, so a detector that has none never appears
+    in a verdict -- and a builder that defaulted to "promote what I was not
+    told about" would grant full confidence and alerting rights to exactly
+    the detector nobody has measured.
+    """
     report = evaluate_all()
 
-    assert len(report.promoted_registry) == 4
+    # Every registry entry survives the rebuild; none is dropped.
+    assert {entry.detector for entry in report.promoted_registry} == {
+        entry.detector for entry in REGISTRY
+    }
+
+    backtested = {verdict.detector for verdict in report.verdicts}
     for entry in report.promoted_registry:
-        assert entry.maturity == Maturity.VALIDATED
-        assert entry.may_alert is True
+        if entry.detector in backtested:
+            assert entry.maturity == Maturity.VALIDATED
+            assert entry.may_alert is True
+        else:
+            assert entry.maturity < Maturity.VALIDATED
+            assert entry.may_alert is False
+            assert entry.blocked_by, f"{entry.detector} is held back without a reason"
 
 
 # ==============================================================================
@@ -180,16 +199,43 @@ def test_build_promoted_registry_keeps_blocked_at_implemented():
 # ==============================================================================
 
 
-def test_current_registry_is_fully_validated():
-    """The live REGISTRY reflects that all detectors have been promoted."""
+def test_every_validated_detector_was_actually_backtested():
+    """
+    Promotion is earned, not declared.
+
+    This used to assert that every entry in REGISTRY was VALIDATED, which was
+    true on the day it was written and stopped being an invariant the moment a
+    fifth detector was built. The durable property is the one below: a
+    detector may sit at VALIDATED only if a backtest put it there.
+    """
+    backtested = {verdict.detector for verdict in evaluate_all().verdicts}
+
     for entry in REGISTRY:
-        assert entry.maturity == Maturity.VALIDATED, f"{entry.detector} not validated"
-        assert entry.may_alert is True
+        if entry.maturity == Maturity.VALIDATED:
+            assert entry.detector in backtested, (
+                f"{entry.detector} is validated but no backtest covers it"
+            )
+            assert entry.may_alert is True
 
 
-def test_maturity_gate_reports_four_alerting():
+def test_every_unpromoted_detector_names_what_blocks_it():
+    """
+    A detector held back without a stated reason reads as an oversight, and
+    the next reader cannot tell whether promoting it is safe.
+    """
+    for entry in REGISTRY:
+        if entry.maturity < Maturity.VALIDATED:
+            assert entry.blocked_by
+            assert entry.may_alert is False
+            assert entry.ceiling <= 0.60
+
+
+def test_the_alerting_set_is_exactly_the_validated_set():
     gate = MaturityGate()
-    assert len(gate.alerting_detectors()) == 4
+    alerting = {entry.detector for entry in gate.alerting_detectors()}
+    validated = {e.detector for e in REGISTRY if e.maturity == Maturity.VALIDATED}
+
+    assert alerting == validated
 
 
 def test_verdict_serialization():

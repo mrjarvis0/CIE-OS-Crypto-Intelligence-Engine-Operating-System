@@ -27,7 +27,10 @@ from tools.placement import (
     State,
     empty_directories,
     generate,
+    generated_orphans,
     planned_reasons,
+    relative as relative_to_root,
+    render,
     resolve,
     verify,
 )
@@ -110,25 +113,89 @@ def test_every_planned_directory_states_what_blocks_it():
     assert not report.unexplained, report.describe()
 
 
-def test_planned_skill_reasons_come_from_the_registry():
+def test_the_skill_rule_states_no_reason_of_its_own():
     """
     Two lists of "why this is not built" drift, and the drift is invisible. The
-    table carries no skill reasons of its own; it reads them.
-    """
-    reasons = planned_reasons()
-    assert reasons, "PLANNED_SKILLS should be readable"
+    table carries no skill reasons of its own; it reads them from the registry.
 
-    skill_rule = resolve("skills/smart_money")
+    Asserted against the rule rather than against a named unbuilt skill: every
+    skill is now built and `PLANNED_SKILLS` is empty, so a test that picked one
+    would have nothing to pick.
+    """
+    skill_rule = resolve("skills/anything_not_yet_built")
+
     assert skill_rule is not None
     assert skill_rule.state is State.PLANNED
     assert not skill_rule.note, "the rule must defer to the registry, not restate it"
 
 
 def test_a_generated_readme_names_the_reason_from_the_registry():
-    produced = generate(write=False)
-    body = produced.get("skills/smart_money", "")
+    """The registry's text reaches the page, rather than being paraphrased."""
+    rule = resolve("skills/example")
+    assert rule is not None
 
-    assert "token prices" in body, body[:200]
+    body = render("skills/example", rule, {"example": "needs a price feed"})
+
+    assert "Blocked by: needs a price feed" in body
+
+
+def test_a_planned_directory_with_no_reason_says_so_rather_than_inventing_one():
+    rule = resolve("skills/example")
+    assert rule is not None
+
+    body = render("skills/example", rule, {})
+
+    assert "no blocking reason recorded" in body
+
+
+def test_planned_reasons_survives_a_registry_that_cannot_be_imported():
+    """Regeneration happens mid-edit; the tool must not die with the tree."""
+    assert isinstance(planned_reasons(), dict)
+
+
+# ==============================================================================
+# A NOTE MUST NOT OUTLIVE THE ABSENCE IT DESCRIBES
+# ==============================================================================
+
+def test_no_generated_readme_describes_a_directory_that_holds_code():
+    """
+    The mirror image of a stale pointer, and it went unnoticed for a release.
+
+    Fifteen skills were built under directories whose generated README still
+    read "Not built yet". Neither `generate` nor `verify` could see it: both
+    walk the *empty* directories, and these had stopped being empty. A note
+    that survives the absence it describes is a lie with a marker on it.
+    """
+    orphans = [relative_to_root(p) for p in generated_orphans()]
+
+    assert not orphans, (
+        f"{len(orphans)} generated README(s) sit on top of real code; "
+        f"run `python -m tools.placement --write`: {orphans[:5]}"
+    )
+
+
+def test_an_orphan_is_detected_once_a_planned_directory_gains_code(tmp_path):
+    """The detector fires on the transition, not on a hand-written README."""
+    directory = tmp_path / "skills" / "later"
+    directory.mkdir(parents=True)
+    readme = directory / "README.md"
+    readme.write_text(GENERATED_MARKER + "\n\n# planned\n", encoding="utf-8")
+
+    assert generated_orphans(tmp_path) == ()
+
+    (directory / "analysis.py").write_text("value = 1\n", encoding="utf-8")
+
+    assert generated_orphans(tmp_path) == (readme,)
+
+
+def test_a_hand_written_readme_is_never_treated_as_an_orphan(tmp_path):
+    """Only this module's own output may be removed by this module."""
+    directory = tmp_path / "skills" / "documented"
+    directory.mkdir(parents=True)
+    (directory / "README.md").write_text("# Written by a person\n", encoding="utf-8")
+    (directory / "analysis.py").write_text("value = 1\n", encoding="utf-8")
+
+    assert generated_orphans(tmp_path) == ()
 
 
 # ==============================================================================

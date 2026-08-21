@@ -2,7 +2,7 @@
 
 > Current snapshot. Overwritten each session. History lives in `BUILD_LOG.md`.
 
-- **Last updated:** 2026-08-19
+- **Last updated:** 2026-08-21
 - **Repo root:** `F:\CIE-OS`
 - **Agent root:** `F:\CIE-OS\agents\A01_Blockchain_Intelligence`
 - **Interpreter:** `F:\CIE-OS\.venv\Scripts\python.exe`
@@ -11,13 +11,139 @@
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **1,229 passed** (excl. 40 pre-existing async failures) |
+| `python -m pytest -q` | **1,792 passed**, 1 skipped, **0 failed** |
 | `python -m cli doctor` | **14/14 `ok`**, schema **v7**, exit 0 |
-| `python -m cli detectors` | **4** detectors, all `validated`, **4 may alert** |
+| `python -m cli detectors` | **5** detectors, 4 `validated` and alerting, 1 `implemented` and muted |
 | `python -m cli verify detectors` | **4/4 promotable**, zero FPR, perfect recall |
-| `python -m cli skills` | **4** skills implemented, 15 specified but not built |
+| `python -m cli skills` | **19** skills implemented |
 | `python -m cli providers` | 21 endpoints, 9 usable, 12 dormant, **1 keyed active** (alchemy) |
 | `python -m cli chains` | **15** chains registered, 13 observable, 13 token-capable |
+
+## 2026-08-21 -- triage + reconciliation
+
+Health re-verified against the code, not the doc: **1,792 passed, 1 skipped, 0
+failed**; `cli doctor` 14/14; no TODO/FIXME debt; every `NotImplementedError`
+is a provider seam or abstract base method (e.g. `BaseAgent.execute`), not a
+gap. `pytest-asyncio 1.4.0` is now installed, which is why the suite is green.
+
+Reconciled stale claims below to match the code: WARM/LEDGER tiers are built and
+tested (were "schema only"), whale-label wiring and the exchange-flow detector
+are done (were "decisions left").
+
+**Fixed:** `memory/storage/sqlite.py::connect()` leaked its live connection when
+called twice (a caller connecting the storage and then the repository wrapping
+it hit this) — aiosqlite reported it deleted-before-closed at GC. `connect()` is
+now idempotent. Guarded by `test_storage.py -W error::ResourceWarning`.
+
+**Still open (operator's call):** token/stablecoin attribution; approval-risk
+decoder is complete but unwired (needs an approvals table + capture);
+DET-EXPLOIT-02 stays muted until a labelled drain corpus exists.
+
+## 2026-08-20 -- security pass
+
+Four workstreams, all complete. Suite 1,466 -> **1,679 passing, 0 failing**.
+
+### 1. Security audit of the existing modules
+
+`config/security` (1,117 lines) and `tools/security` (1,416) read line by
+line. **16 defects, 8 reproduced against the shipped code before the fix.**
+Full record: `agents/A01_Blockchain_Intelligence/docs/architecture/security-audit-2026-08-20.md`.
+
+The four that mattered most:
+
+| Defect | Effect |
+|---|---|
+| `SecretsManager` path traversal | `resolve("../../pyproject.toml")` returned 2,220 bytes from outside `secrets_dir` |
+| `Rule()` defaulted to allow-everything | a rule dict missing its `permission` key authorized every principal for everything |
+| No MAC on `encrypt_text` | one flipped ciphertext byte turned `admin=0` into `admin=9`, no error raised |
+| `guard()` passed rules the mapping | a payload with a script tag and DROP TABLE cleared a "hard security gateway" untouched |
+
+Also: token expiry raised `ModuleNotFoundError` and was never enforced;
+`ApiKeyManager()` recursed until the stack ran out; the sandbox env scrub was
+a denylist that missed `ALCHEMY_URL` and `DATABASE_URL`; `block_hosts` let
+`169.254.169.254` through; `PermissionError` subclassed the builtin so
+`except OSError` swallowed denials; `allow_all()` allowed nothing.
+
+**67 regression tests** in `tools/security/tests/test_hardening.py` and
+`config/tests/test_security_hardening.py`, each named for the defect it
+guards.
+
+### 2. DET-EXPLOIT-02 -- anomalous outflow
+
+| | |
+|---|---|
+| Measurement | `blockchain/security/exploit_detection/outflow.py` -- pure, no I/O |
+| Judgement | `intelligence/analysis/exploit.py` -- `ExploitAnalyzer` |
+| Maturity | **`implemented`**, ceiling 0.60, **may not alert** |
+| Tests | 50 |
+
+Gate is the catalog's: `outflow_fraction >= 0.30` in `<= 3` blocks **and**
+`z >= 6`. The z is read against the **modified** z-score (MAD / 0.6745, with a
+mean-absolute-deviation fallback), because the classical one is self-defeating
+here -- measured, one prior drain in the baseline costs it 11.8x of its
+separation against 4.1x for the robust estimator. Calibration: **0 false
+positives on 1,998 simulated ordinary windows**, injected drain caught.
+
+Deliberately **not** promoted. There is no labelled corpus of protocol drains,
+so the error rate is `unmeasured`, and section 7.3 bars an unmeasured detector
+from alerting. It is the first detector in the registry to sit below the
+ceiling since promotion, which is a useful demonstration that the gate does
+something.
+
+### 3. Approval risk screening
+
+| | |
+|---|---|
+| Decoder | `blockchain/security/approval_risk/approvals.py` -- ERC-20, ERC-721, `ApprovalForAll` |
+| Exposure | `blockchain/security/approval_risk/exposure.py` -- replay to the live grant set |
+| Tests | 39 |
+
+`contracts/signatures.py` sent `ApprovalForAll` here by name; this is the
+consumer that note pointed at. Three traps handled explicitly: ERC-20
+`Approval` and `ApprovalForAll` share a layout and differ only by `topic0`;
+each standard revokes differently; and the three key a grant differently --
+ERC-20 by spender, ERC-721 by token id (approve *replaces*), `ApprovalForAll`
+by operator.
+
+**Complete and not reachable from stored data.** There is no approvals table
+and `contracts/events.py` refuses approval logs as non-transfers, so nothing
+feeds it. The decoder had to exist before capturing the logs was worth doing;
+wiring it needs a migration, which is the operator's call.
+
+### 4. The eight pointer directories now hold code
+
+`api/`, `monitoring/`, `models/`, `plugins/`, `reasoning/`, `reporting/`,
+`security/`, `workflows/` are **redirect packages**: each binds the canonical
+module object itself and forwards every other name to it live through
+`__getattr__`. `api.rest is interfaces.rest` -- identity, so drift is
+impossible by construction rather than by instruction.
+
+`security/` is the exception that proves it: it binds `config.security` and
+`tools.security` under `configuration` and `runtime` and refuses to merge
+them, because both define a secret wrapper with different hardening and a
+merged `security.Secret` would hide the choice.
+
+`sandbox/` stays empty. There is nothing to redirect it to, and code placed
+there ships by accident. **56 tests** in `tools/tests/test_redirects.py`.
+
+### Also fixed along the way
+
+- **The venv was broken.** `pyvenv.cfg` pointed at another machine's user
+  (`C:/Users/thaha/AppData/Roaming/uv/python/...`), which does not exist here.
+  Repointed at the local CPython 3.14.7; backup at `.venv/pyvenv.cfg.bak`.
+- `interfaces/service.py` told API callers "None has a measured error rate, so
+  none alerts" -- false since the four promotions. Now derived.
+- `cli detectors` said "Confidence ceiling is 1.0" unconditionally. Now
+  derived, and reports what is muted.
+- Three tests asserted the *snapshot* "all detectors are validated" rather
+  than the invariant. Rewritten to assert that a detector reaches `validated`
+  only if a backtest put it there, and that anything below it names its
+  blocker.
+- The `blockchain/security/*` placement note blamed "event decoding beyond
+  transfers", which `contracts/` has done since the contracts layer landed.
+  Corrected to the real blocker: bytecode analysis and an ABI source.
+
+---
 
 ## Steps completed
 
@@ -76,8 +202,8 @@ floor is derived from the chain's own percentile, never a fixed currency amount.
 |---|---|---|---|
 | CACHE | seconds | raw provider responses, memory only | done |
 | HOT | 7 days | per-block aggregates + material tx | repository built |
-| WARM | 90 days | hourly aggregates (the anomaly baseline) | schema only |
-| LEDGER | forever | entities, track records, labels | schema only |
+| WARM | 90 days | hourly aggregates (the anomaly baseline) | built + tested (`tiers/warm.py`) |
+| LEDGER | forever | entities, track records, labels | built + tested (`tiers/ledger.py`) |
 
 ## Architecture Invariants status
 
@@ -131,13 +257,16 @@ overconfidence. Confidence ceiling lifted from 0.60 to 1.00.
 | TERMINAL | ✅ 14 CLI commands, 9 REST routes, HTML dashboard, 15-chain directory |
 | ENGINEERING | ✅ 1,101 tests, observability, error recovery, docs, reproducibility |
 
-### Three decisions left (named and left on purpose)
+### Decisions — status reconciled 2026-08-21
 
-1. **Whale skill labels.** Wire labels to DET-WHALE-01 — changes what it
-   concludes on live data.
-2. **Token transfer attribution.** Stablecoin flow is unattributed; the
-   rollup reads native value only.
-3. **Exchange flow detector.** No detector consumes exchange flow data yet.
+1. **Whale skill labels.** ✅ **DONE.** `skills/whale_detection/transfers.py`
+   reads the label ledger (`LabelRepository`/`LabelSet`); `counterparty_type`
+   now answers from a sourced claim, `unlabelled` when the list is empty.
+2. **Token transfer attribution.** ⏳ **STILL OPEN.** Stablecoin flow is
+   unattributed; the rollup (`tiers/hot.py`, `tiers/warm.py`) reads native
+   value only. Borderline vs. the "no new feature" rule — operator's call.
+3. **Exchange flow detector.** ✅ **DONE.** `DET-EXCHANGE-01` (exchange_flow)
+   is validated and alerting.
 
 ### Completed (previously out of scope)
 

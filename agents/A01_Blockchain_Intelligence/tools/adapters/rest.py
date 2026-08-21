@@ -30,6 +30,7 @@ from typing import Any, Dict, Iterable, Optional
 
 from . import (
     AdapterAuthenticationError,
+    AdapterAuthorizationError,
     AdapterConnectionError,
     AdapterError,
     AdapterRetryableError,
@@ -50,6 +51,25 @@ METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
 _READ_CHUNK = 8192
+
+#: How much of an error body travels with the error. Enough for a JSON error
+#: envelope; short enough that a stack trace stays readable and an HTML error
+#: page does not end up in the log.
+_ERROR_BODY_LIMIT = 400
+
+
+def _error_detail(exc: urllib.error.HTTPError) -> str:
+    """The server's error body, trimmed, as a suffix for the error message."""
+    try:
+        body = exc.read()
+    except Exception:  # noqa: BLE001 - the body is a bonus, never the failure
+        return ""
+    text = body.decode("utf-8", errors="replace").strip()
+    if not text:
+        return ""
+    if len(text) > _ERROR_BODY_LIMIT:
+        text = text[:_ERROR_BODY_LIMIT] + "..."
+    return ": " + " ".join(text.split())
 
 
 def register(**options: Any) -> "RESTAdapter":
@@ -168,25 +188,28 @@ class RESTAdapter(BaseAdapter):
                 status = resp.status
                 headers = dict(resp.headers.items())
         except urllib.error.HTTPError as exc:
-            # urlopen raises HTTPError for 4xx/5xx; the response body may carry
-            # a server error message worth preserving.
+            # urlopen raises HTTPError for 4xx/5xx; the response body carries the
+            # server's own explanation ("model not found", "rate limit reached",
+            # "temperature is not supported on this model") and is the only part
+            # of the failure a caller can act on, so it travels with the error.
+            detail = _error_detail(exc)
             self.log.debug("HTTP error %s for %s %s", exc.code, method, url)
             if exc.code in RETRYABLE_STATUS:
                 raise AdapterRetryableError(
-                    f"transient HTTP {exc.code} for {method} {url}",
+                    f"transient HTTP {exc.code} for {method} {url}{detail}",
                     transport=self.transport,
                 ) from exc
             if exc.code in (401,):
                 raise AdapterAuthenticationError(
-                    f"authentication failed (HTTP 401) for {url}",
+                    f"authentication failed (HTTP 401) for {url}{detail}",
                     transport=self.transport,
                 ) from exc
             if exc.code in (403,):
                 raise AdapterAuthorizationError(
-                    f"forbidden (HTTP 403) for {url}", transport=self.transport
+                    f"forbidden (HTTP 403) for {url}{detail}", transport=self.transport
                 ) from exc
             raise AdapterTransportError(
-                f"HTTP {exc.code} for {method} {url}", transport=self.transport
+                f"HTTP {exc.code} for {method} {url}{detail}", transport=self.transport
             ) from exc
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (TimeoutError, ConnectionError)):
@@ -257,26 +280,25 @@ class RESTAdapter(BaseAdapter):
             )
 
     def stream(self, request: AdapterRequest) -> Iterable[bytes]:
-        """Stream the raw response body in chunks."""
+        """Stream the raw response body in chunks.
+
+        The request is built by :meth:`_build`, the same way an executed one is.
+        Streaming used to build its own ``Request`` with ``data=None``, which
+        silently dropped the body: a streamed POST (an SSE completion, a
+        text-to-speech call) arrived at the server with no payload at all.
+        """
         self.validate_request(request)
         method = (request.method or "GET").upper()
         if method not in METHODS:
             raise AdapterValidationError(
                 f"unsupported HTTP method {method!r}", transport=self.transport
             )
-        req = urllib.request.Request(
-            url=self._url(request.path, request.params),
-            data=None,
-            method=method,
-            headers=self._request_headers(method),
-        )
+        req, timeout = self._build(request)
         try:
-            resp = urllib.request.urlopen(
-                req, timeout=request.timeout or self.default_timeout, context=self._context()
-            )
+            resp = urllib.request.urlopen(req, timeout=timeout, context=self._context())
         except urllib.error.HTTPError as exc:
             raise AdapterTransportError(
-                f"HTTP {exc.code} for {method} {req.full_url}",
+                f"HTTP {exc.code} for {method} {req.full_url}{_error_detail(exc)}",
                 transport=self.transport,
             ) from exc
         except urllib.error.URLError as exc:

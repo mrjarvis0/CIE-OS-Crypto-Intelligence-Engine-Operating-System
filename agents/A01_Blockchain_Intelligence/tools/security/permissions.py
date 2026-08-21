@@ -17,8 +17,9 @@ The model is deliberately simple and composable:
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set
+from typing import Deque, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 __all__ = [
     "PermissionError",
@@ -28,11 +29,23 @@ __all__ = [
     "PermissionChecker",
     "allow_all",
     "deny_all",
+    "grant_match",
 ]
 
 
-class PermissionError(PermissionError):
-    """Raised when a principal lacks the permission required by a tool."""
+class PermissionError(Exception):  # noqa: A001 -- public name, kept for callers
+    """
+    Raised when a principal lacks the permission required by a tool.
+
+    The base is :class:`Exception`, not the builtin ``PermissionError`` this
+    name shadows. The builtin is an :class:`OSError` subclass, so while this
+    class inherited from it, any ``except OSError:`` around file or socket
+    work -- and there is a lot of that in an agent that reads databases and
+    dials RPC endpoints -- silently swallowed an authorization denial and
+    carried on. A denial must reach the caller as a denial.
+
+    The name is kept because it is the module's exported API.
+    """
 
     code = "PERMISSION_DENIED"
 
@@ -122,8 +135,24 @@ class PermissionMap:
         return bool(self._store.get(principal))
 
     def allows(self, principal: str, permission: str) -> bool:
-        grants = self._store.get(principal, ())
-        return grant_match(permission, grants)
+        """
+        True when ``principal`` holds a grant matching ``permission``.
+
+        A ``"*"`` principal key applies to everyone. Without it, the
+        ``allow_all()`` helper -- documented as granting ``*`` to every
+        principal -- stored its grant under the literal key ``"*"`` and then
+        looked it up under the caller's own id, so it matched nobody and
+        denied everything. A helper whose name and behaviour are opposites is
+        worse than no helper.
+
+        Deny-by-default is unchanged: a map without a ``"*"`` key grants
+        nothing it was not given.
+        """
+        if grant_match(permission, self._store.get(principal, ())):
+            return True
+        if principal != "*" and grant_match(permission, self._store.get("*", ())):
+            return True
+        return False
 
     def principal_permissions(self, principal: str) -> Sequence[str]:
         return sorted(self._store.get(principal, ()))
@@ -139,9 +168,20 @@ class PermissionChecker:
     monitoring/governance layers.
     """
 
-    def __init__(self, *, grants: Optional[Mapping[str, Iterable[str]]] = None) -> None:
+    #: How many recent decisions are retained. The list used to be unbounded,
+    #: and a long-lived agent appends one entry per permission check forever.
+    DECISION_HISTORY: int = 1000
+
+    def __init__(
+        self,
+        *,
+        grants: Optional[Mapping[str, Iterable[str]]] = None,
+        history: Optional[int] = None,
+    ) -> None:
         self.map = PermissionMap(grants)
-        self.decisions: List[Mapping[str, object]] = []
+        self.decisions: Deque[Mapping[str, object]] = deque(
+            maxlen=history if history is not None else self.DECISION_HISTORY
+        )
 
     def check(self, principal: str, permission: str, *, tool: str = "") -> bool:
         allowed = self.map.allows(principal, permission)

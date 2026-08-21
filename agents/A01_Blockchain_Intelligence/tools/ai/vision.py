@@ -10,6 +10,13 @@ Provider-agnostic: real vision models plug in behind :class:`VisionModel`;
 extracts image metadata (format sniffing, dimensions from headers where
 possible) and returns a structured analysis payload, so the capability is
 exercisable offline.
+
+:class:`LLMVision` is the working implementation: it drives *any* multimodal
+language model registered in the layer, because every one of them takes the
+same thing -- an image and a question -- and the differences between their
+content-block formats are already handled by the LLM providers. A dedicated
+``AnthropicVision`` and ``OpenAIVision`` would be the same class twice with a
+different image serializer, and the serializer is not this module's problem.
 """
 
 from __future__ import annotations
@@ -20,11 +27,29 @@ import struct
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from . import AIUsage, AIValidationError, AIResponse, BaseAIModel
+from . import (
+    AIError,
+    AIExecutionError,
+    AIRequest,
+    AIResponse,
+    AIUsage,
+    AIValidationError,
+    BaseAIModel,
+)
+from .providers import create_provider, register_provider
 
-__all__ = ["VisionRequest", "VisionResult", "VisionModel", "LocalVision", "sniff_image_format"]
+__all__ = [
+    "VisionRequest",
+    "VisionResult",
+    "VisionModel",
+    "LocalVision",
+    "LLMVision",
+    "sniff_image_format",
+    "sniff_dimensions",
+    "media_type_for",
+]
 
 
 def sniff_image_format(data: bytes) -> str:
@@ -153,8 +178,6 @@ class VisionModel(BaseAIModel):
         except AIError:
             raise
         except Exception as exc:  # noqa: BLE001
-            from . import AIExecutionError
-
             raise AIExecutionError(str(exc), provider=self.provider, model=self._model) from exc
         return self.normalize(
             True,
@@ -207,3 +230,113 @@ class LocalVision(VisionModel):
             dimensions=(width, height),
             request_id=request.request_id,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Model-backed vision
+# --------------------------------------------------------------------------- #
+
+#: Sniffed format -> IANA media type. Providers reject an image whose declared
+#: type does not match its bytes, so the type is read from the bytes.
+MEDIA_TYPES: Mapping[str, str] = {
+    "png": "image/png",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "tiff": "image/tiff",
+    "ico": "image/x-icon",
+}
+
+VISION_SYSTEM = (
+    "You analyse images. Reply with JSON only, in the form "
+    '{"description": "<what the image shows>", "ocr_text": "<all text in the '
+    'image, verbatim, or an empty string>", "objects": ["<object>"], '
+    '"labels": ["<short label>"]}.'
+)
+
+
+def media_type_for(data: bytes) -> str:
+    """The media type for image bytes, from their magic number."""
+    return MEDIA_TYPES.get(sniff_image_format(data), "application/octet-stream")
+
+
+class LLMVision(VisionModel):
+    """Image understanding through any multimodal language model.
+
+    The image goes to the model as an attachment on a normal chat message and
+    comes back as a JSON analysis. Format and dimensions are still read from
+    the bytes locally: they are facts about the file, and asking a model to
+    guess what ``struct.unpack`` can read is slower and worse.
+
+    ``provider`` reports the language model's own provider so the response is
+    attributed to the vendor that did the work.
+    """
+
+    provider = "llm"
+
+    def __init__(self, client: Any = None, *, logger: Any = None) -> None:
+        self.client = client if client is not None else create_provider("llm")
+        super().__init__(model=self.client.model, logger=logger)
+        self.provider = self.client.provider
+
+    def _analyze(self, request: VisionRequest, data: bytes) -> VisionResult:
+        from .llm import ChatMessage, ImagePart, LLMRequest  # local import
+
+        if not data:
+            raise AIValidationError("no image data to analyse", provider=self.provider)
+
+        fmt = sniff_image_format(data)
+        width, height = sniff_dimensions(data, fmt)
+        tasks = [str(task) for task in (request.tasks or ())]
+        prompt = request.prompt or "describe this image"
+        if "ocr" in tasks:
+            prompt += "\nTranscribe every piece of text visible in the image."
+
+        response = self.client.execute(
+            LLMRequest(
+                messages=[
+                    ChatMessage(
+                        role="user",
+                        content=prompt,
+                        images=[ImagePart(data=data, media_type=media_type_for(data))],
+                    )
+                ],
+                system=VISION_SYSTEM,
+                temperature=0.0,
+                max_tokens=2048,
+                json_mode=True,
+            )
+        )
+
+        payload = (response.data or {}).get("json_data")
+        if not isinstance(payload, Mapping):
+            raise AIExecutionError(
+                "vision model did not return a structured analysis",
+                provider=self.provider,
+                model=self._model,
+            )
+
+        analysis: Dict[str, Any] = {
+            "description": str(payload.get("description", "")),
+            "format": fmt,
+            "size_bytes": len(data),
+            "dimensions": (width, height),
+            "model": self._model,
+            "tasks": tasks,
+        }
+        return VisionResult(
+            analysis=analysis,
+            ocr_text=str(payload.get("ocr_text", "") or ""),
+            objects=[str(item) for item in (payload.get("objects") or [])],
+            labels=[str(item) for item in (payload.get("labels") or [])],
+            format=fmt,
+            dimensions=(width, height),
+            request_id=request.request_id,
+        )
+
+
+register_provider("vision", "local", LocalVision, requires_key=False,
+                  replace_existing=True, description="Offline image metadata analysis")
+register_provider("vision", "llm", LLMVision, requires_key=False,
+                  replace_existing=True, description="Analyse with the configured multimodal LLM")

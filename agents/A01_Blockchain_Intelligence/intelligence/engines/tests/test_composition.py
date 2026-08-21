@@ -120,15 +120,34 @@ def test_a_composed_subject_drives_the_real_detectors(stored):
     assert findings["whale"]["data"]["address"] == ALICE
 
 
-def test_all_three_skills_contribute(stored):
+def test_the_skills_that_can_read_native_history_contribute(stored):
+    """
+    Asserted as a subset, not as the whole roster.
+
+    An equality here was a standing tax on the skills layer: it named the four
+    skills that existed when it was written, so building a fifth failed a test
+    about composition that the fifth skill had not broken. What composition
+    owes the caller is that a skill which *can* answer does — the skills that
+    read native transfers, over a fixture that holds native transfers.
+    """
     composition = SubjectComposer().compose(stored, chain="ethereum", address=ALICE)
 
-    assert set(composition.contributed) == {
-        "wallet_profile",
-        "whale_transfers",
-        "token_flow",
-    }
+    assert {"wallet_profile", "whale_transfers", "token_flow"} <= set(
+        composition.contributed
+    )
     assert not composition.failed
+
+
+def test_every_registered_skill_either_contributes_or_declines(stored):
+    """No skill may be silently dropped between the registry and the result."""
+    registry = SkillRegistry()
+    composition = SubjectComposer().compose(stored, chain="ethereum", address=ALICE)
+
+    accounted = (
+        set(composition.contributed) | set(composition.declined) | set(composition.failed)
+    )
+
+    assert set(registry.names()) == accounted
 
 
 # ==============================================================================
@@ -259,15 +278,12 @@ def test_composition_over_an_empty_database_declines_cleanly():
         )
 
     assert not composition.usable
-    assert set(composition.declined) == {
-        "wallet_profile",
-        "whale_transfers",
-        "token_flow",
-        # Declines for a different reason from the other three: they have no
-        # history to read, and it has no labels to attribute history to. Both
-        # are refusals to answer, which is what this asserts.
-        "exchange_flow",
-    }
+    # The claim is about all of them, so it is stated over all of them: given
+    # nothing to read, every skill refuses rather than inventing a subject, and
+    # none of them crashes on the empty case.
+    assert set(composition.declined) == set(SkillRegistry().names())
+    assert not composition.contributed
+    assert not composition.failed
 
 
 def test_composition_without_an_address_still_answers_chain_questions(stored):

@@ -144,11 +144,31 @@ def test_coverage_without_storage_reports_unavailable():
 
 
 def test_the_detector_listing_comes_from_the_gate(service):
+    """
+    The listing reports the gate's own answer, including the refusals.
+
+    It used to assert every listed detector could alert, which held only
+    while every detector was validated. What the listing has to get right is
+    the *correspondence*: a detector appears as alerting exactly when the gate
+    says it may, and a muted one carries the reason it is muted -- otherwise
+    the API shows a detector that looks live and is not.
+    """
+    from decision.maturity import MaturityGate
+
     result = service.detectors()
+    gate = MaturityGate()
 
     assert result.ok
-    assert len(result.data["alerting"]) == 4
-    assert all(row["may_alert"] is True for row in result.data["detectors"])
+
+    assert set(result.data["alerting"]) == {
+        entry.detector for entry in gate.alerting_detectors()
+    }
+
+    for row in result.data["detectors"]:
+        standing = gate.for_detector(row["detector"])
+        assert row["may_alert"] is standing.may_alert
+        if not row["may_alert"]:
+            assert row["blocked_by"], f"{row['detector']} is muted without a reason"
 
 
 def test_health_reports_storage_and_decision_state(service):

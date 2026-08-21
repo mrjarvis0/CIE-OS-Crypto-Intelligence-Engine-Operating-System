@@ -14,18 +14,24 @@ Design rules
 * A secret value is wrapped in :class:`Secret` and handed out once; callers
   own the reference.
 * The store provides ``get`` (raw) and ``masked`` (safe) access paths.
-* Optional encrypted persistence requires the provided ``cryptography`` is
-  not importable; when a backing file is requested without it, a clear
-  :class:`RuntimeError` is raised instead of silently falling back.
+* :class:`Secret` refuses pickling and copying, matching
+  :class:`config.security.secrets.SecretValue`.
+
+There is **no persistence.** This store is in-memory only, and nothing here
+writes a secret to disk. The previous version of this docstring described
+"optional encrypted persistence" and a ``RuntimeError`` raised when
+``cryptography`` was missing; neither exists in the code, and a reader
+planning around a durable store would have found their secrets gone on
+restart. Persist secrets with the secrets *files* directory that
+:class:`config.security.secrets.SecretsManager` reads, or with the deployment
+platform's own secret store.
 """
 
 from __future__ import annotations
 
-import json
 import secrets as _secrets
 import threading
 import time
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 from ..utils.helpers import mask_secret
@@ -66,6 +72,27 @@ class Secret:
     def __repr__(self) -> str:
         return f"<Secret name={self.name!r} value={self.display}>"
 
+    # -- serialization guards ---------------------------------------------
+
+    def __reduce__(self):
+        """
+        Refuse pickling and copying.
+
+        ``__slots__`` alone does not stop it: the default ``__reduce_ex__``
+        serialises the slot values, so ``copy.deepcopy`` and ``pickle.dumps``
+        both wrote ``_value`` out in plaintext -- past ``__str__``, past
+        ``__repr__``, past every masking path this class provides. The
+        hardened sibling in ``config.security.secrets`` already refused; the
+        two classes now agree.
+        """
+        raise TypeError(
+            "Secret cannot be pickled or copied; "
+            "read it through .raw at the point of use."
+        )
+
+    def __getstate__(self):
+        raise TypeError("Secret cannot be serialized; read it through .raw.")
+
 
 def generate_secret(length: int = 32) -> str:
     """Return a cryptographically strong random secret string."""
@@ -77,7 +104,7 @@ def generate_secret(length: int = 32) -> str:
 
 class SecretsStore:
     """
-    Thread-safe, optionally persistence-backed secret registry.
+    Thread-safe, in-memory secret registry. Nothing here is persisted.
 
     Parameters
     ----------

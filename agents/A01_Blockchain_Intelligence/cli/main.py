@@ -179,12 +179,26 @@ def cmd_detectors(args: argparse.Namespace) -> int:
             f"{row['blocked_by']}"
         )
     print()
-    alerting = [row for row in result.data["detectors"] if row["may_alert"]]
+    rows = result.data["detectors"]
+    alerting = [row for row in rows if row["may_alert"]]
+    muted = [row for row in rows if not row["may_alert"]]
     if alerting:
+        # The counts are derived. A fixed "ceiling is 1.0" was accurate
+        # while every detector was validated and became wrong the moment
+        # one was not -- the same failure the maturity gate exists to stop
+        # a detector committing about itself.
         print(
-            f"{len(alerting)} detector(s) validated and may alert. Confidence "
-            "ceiling is 1.0.\nRun `a01 verify detectors` to re-verify against "
-            "labelled evaluation cases."
+            f"{len(alerting)} of {len(rows)} detector(s) validated and may "
+            "alert at a confidence ceiling of 1.0."
+        )
+        if muted:
+            print(
+                f"{len(muted)} held below that ceiling, each with its reason "
+                "in the last column."
+            )
+        print(
+            "Run `a01 verify detectors` to re-verify against labelled "
+            "evaluation cases."
         )
     else:
         print(

@@ -9,6 +9,16 @@ Provider-agnostic: real translation engines plug in behind :class:`Translator`.
 small built-in phrase dictionary so the capability works offline; providers
 with full model coverage are expected to subclass and override
 :meth:`_translate_text`/:meth:`_detect`.
+
+Shipped providers: :class:`DeepLTranslator` (a dedicated engine) and
+:class:`LLMTranslator` (any registered language model, which is the one that
+can honour ``preserve_terms`` -- an instruction a translation endpoint has no
+field for).
+
+Remote engines detect the source language themselves and report what they
+found. Sending them this module's stopword guess would override a better
+answer with a worse one, so an unset ``source_lang`` is passed through as
+"auto" rather than filled in first.
 """
 
 from __future__ import annotations
@@ -18,9 +28,34 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-from . import AIUsage, AIValidationError, AIResponse, BaseAIModel
+from . import (
+    AIError,
+    AIExecutionError,
+    AIRequest,
+    AIResponse,
+    AIUsage,
+    AIValidationError,
+    BaseAIModel,
+)
+from .providers import (
+    HTTPTransport,
+    create_provider,
+    model_for,
+    register_provider,
+    resolve_api_key,
+)
 
-__all__ = ["TranslationRequest", "TranslationResult", "Translator", "LocalTranslator", "detect_language", "LANGUAGE_NAMES"]
+__all__ = [
+    "TranslationRequest",
+    "TranslationResult",
+    "Translator",
+    "LocalTranslator",
+    "RemoteTranslator",
+    "DeepLTranslator",
+    "LLMTranslator",
+    "detect_language",
+    "LANGUAGE_NAMES",
+]
 
 
 LANGUAGE_NAMES = {
@@ -161,8 +196,6 @@ class Translator(BaseAIModel):
         except AIError:
             raise
         except Exception as exc:  # noqa: BLE001
-            from . import AIExecutionError
-
             raise AIExecutionError(str(exc), provider=self.provider, model=self._model) from exc
         return self.normalize(
             True,
@@ -203,3 +236,211 @@ class LocalTranslator(Translator):
             if " " in phrase and phrase in joined.lower():
                 joined = joined.replace(phrase, mapped)
         return joined
+
+
+# --------------------------------------------------------------------------- #
+# Remote providers
+# --------------------------------------------------------------------------- #
+
+
+class RemoteTranslator(Translator):
+    """Base class for hosted translation engines.
+
+    :meth:`translate` is overridden rather than :meth:`_translate_text`: an
+    engine detects the source language itself, and the detection it reports is
+    better than the stopword guess this module would hand it.
+    """
+
+    provider = "remote"
+    base_url = ""
+    translate_path = ""
+    default_model = ""
+    requires_key = True
+
+    def __init__(
+        self,
+        *,
+        model: str = "",
+        api_key: Optional[str] = None,
+        base_url: str = "",
+        timeout: float = 30.0,
+        max_retries: int = 2,
+        transport: Optional[HTTPTransport] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        logger: Any = None,
+    ) -> None:
+        super().__init__(
+            model=model or model_for(self.capability, self.provider, self.default_model),
+            logger=logger,
+        )
+        self.api_key = resolve_api_key(self.provider, api_key, required=self.requires_key)
+        self.timeout = float(timeout)
+        self.extra_headers = dict(headers or {})
+        self.transport = transport or HTTPTransport(
+            base_url or self.resolve_base_url(self.api_key),
+            headers={**self.auth_headers(), **self.extra_headers},
+            timeout=timeout,
+            max_retries=max_retries,
+            provider=self.provider,
+        )
+
+    @classmethod
+    def resolve_base_url(cls, api_key: str = "") -> str:
+        return cls.base_url
+
+    def auth_headers(self) -> Dict[str, str]:
+        raise NotImplementedError
+
+    def _translate_text(self, text: str, source: str, target: str, terms: Sequence[str]) -> str:
+        # Deliberately not routed through translate(): a subclass that
+        # implemented neither would call this, which would call translate(),
+        # which would call this. The seam fails loudly instead of hanging.
+        raise NotImplementedError("remote translators implement translate(), not _translate_text()")
+
+
+class DeepLTranslator(RemoteTranslator):
+    """DeepL ``/v2/translate``.
+
+    ``preserve_terms`` is not forwarded: DeepL expresses terminology through
+    account-level glossaries, which are provisioned outside a request. The
+    terms are reported back on the result so a caller can see they were not
+    applied rather than assume they were.
+    """
+
+    provider = "deepl"
+    base_url = "https://api.deepl.com"
+    free_base_url = "https://api-free.deepl.com"
+    translate_path = "/v2/translate"
+    default_model = "deepl"
+
+    @classmethod
+    def resolve_base_url(cls, api_key: str = "") -> str:
+        # Free keys carry a ":fx" suffix and are only served by the free host;
+        # sending one to the paid host is a 403 that reads like a bad key.
+        return cls.free_base_url if str(api_key).endswith(":fx") else cls.base_url
+
+    def auth_headers(self) -> Dict[str, str]:
+        return {
+            "Authorization": f"DeepL-Auth-Key {self.api_key}",
+            "content-type": "application/json",
+        }
+
+    def translate(self, request: TranslationRequest) -> TranslationResult:
+        if not request.text.strip():
+            raise AIValidationError("nothing to translate", provider=self.provider)
+
+        payload: Dict[str, Any] = {
+            "text": [request.text],
+            "target_lang": request.target_lang.upper(),
+        }
+        if request.source_lang:
+            payload["source_lang"] = request.source_lang.upper()
+
+        data = self.transport.post_json(
+            self.translate_path, payload, timeout=self.timeout, model=self._model
+        )
+        translations = data.get("translations") or []
+        if not translations or not isinstance(translations[0], Mapping):
+            raise AIExecutionError(
+                "translation engine returned no translation",
+                provider=self.provider,
+                model=self._model,
+            )
+
+        first = translations[0]
+        detected = str(first.get("detected_source_language", "") or "").lower()
+        source = request.source_lang or detected
+        return TranslationResult(
+            translated=str(first.get("text", "")),
+            source_lang=source,
+            target_lang=request.target_lang,
+            confidence=0.95,
+            detected_lang=detected or source,
+            request_id=request.request_id,
+        )
+
+
+TRANSLATION_SYSTEM = (
+    "You are a translation engine. Translate the user text into the requested "
+    "language, preserving meaning, tone, formatting and any terms listed as "
+    "preserved exactly as written. Reply with JSON only, in the form "
+    '{"translation": "<translated text>", "source_lang": "<ISO 639-1 code>"}.'
+)
+
+
+class LLMTranslator(Translator):
+    """Translate with a language model.
+
+    The one implementation that can honour ``preserve_terms`` -- ticker
+    symbols, contract addresses, product names -- which a translation endpoint
+    has no field for and would happily translate into nonsense.
+    """
+
+    provider = "llm"
+
+    def __init__(self, client: Any = None, *, logger: Any = None) -> None:
+        self.client = client if client is not None else create_provider("llm")
+        super().__init__(model=self.client.model, logger=logger)
+        self.provider = self.client.provider
+
+    def translate(self, request: TranslationRequest) -> TranslationResult:
+        from .llm import ChatMessage, LLMRequest  # local import: llm may import us
+
+        if not request.text.strip():
+            raise AIValidationError("nothing to translate", provider=self.provider)
+
+        target = LANGUAGE_NAMES.get(request.target_lang.lower(), request.target_lang)
+        instructions = [f"Target language: {target} ({request.target_lang})"]
+        if request.source_lang:
+            source_name = LANGUAGE_NAMES.get(request.source_lang.lower(), request.source_lang)
+            instructions.append(f"Source language: {source_name} ({request.source_lang})")
+        if request.preserve_terms:
+            instructions.append("Preserve exactly: " + ", ".join(request.preserve_terms))
+
+        response = self.client.execute(
+            LLMRequest(
+                messages=[
+                    ChatMessage(
+                        role="user",
+                        content="\n".join(instructions) + f"\n\nText:\n{request.text}",
+                    )
+                ],
+                system=TRANSLATION_SYSTEM,
+                temperature=0.0,
+                max_tokens=max(256, len(request.text) // 2),
+                json_mode=True,
+            )
+        )
+
+        payload = (response.data or {}).get("json_data")
+        if not isinstance(payload, Mapping) or not payload.get("translation"):
+            raise AIExecutionError(
+                "translation model did not return a translation",
+                provider=self.provider,
+                model=self._model,
+            )
+
+        detected = str(payload.get("source_lang", "") or "").lower()
+        source = request.source_lang or detected or self._detect(request.text)
+        return TranslationResult(
+            translated=str(payload["translation"]),
+            source_lang=source,
+            target_lang=request.target_lang,
+            confidence=0.9,
+            detected_lang=detected or source,
+            request_id=request.request_id,
+        )
+
+    def _translate_text(self, text: str, source: str, target: str, terms: Sequence[str]) -> str:
+        return self.translate(
+            TranslationRequest(text=text, source_lang=source, target_lang=target,
+                               preserve_terms=list(terms))
+        ).translated
+
+
+register_provider("translation", "local", LocalTranslator, requires_key=False,
+                  replace_existing=True, description="Offline detection + phrase dictionary")
+register_provider("translation", "deepl", DeepLTranslator, replace_existing=True,
+                  description="DeepL translation engine")
+register_provider("translation", "llm", LLMTranslator, requires_key=False,
+                  replace_existing=True, description="Translate with the configured LLM")

@@ -54,6 +54,13 @@ class SqliteStorage:
         return self._connection
 
     async def connect(self) -> None:
+        # Idempotent. A second connect would reassign self._connection and
+        # orphan the live one -- aiosqlite then reports it deleted-before-closed
+        # at GC. A caller that connects the storage and then the repository
+        # wrapping it (repo.connect() connects its backend) hits exactly that,
+        # so the second call is a no-op rather than a leak.
+        if self._connection is not None:
+            return
         connection: aiosqlite.Connection | None = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)

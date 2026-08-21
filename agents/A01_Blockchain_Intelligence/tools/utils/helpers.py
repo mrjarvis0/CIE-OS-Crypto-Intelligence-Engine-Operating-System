@@ -32,6 +32,7 @@ __all__ = [
     "compact_dict",
     "redact",
     "mask_secret",
+    "MIN_MASKABLE_LENGTH",
     "safe_dump",
     "balanced_json",
 ]
@@ -216,12 +217,25 @@ def _redact_inner(node: Any, sensitive: set) -> Any:
     return node
 
 
+#: A secret shorter than this reveals nothing at all. Four visible characters
+#: out of seven is not a mask, and short values are exactly the ones a reader
+#: could reconstruct or recognise.
+MIN_MASKABLE_LENGTH = 12
+
+
 def mask_secret(value: str, visible: int = 4) -> str:
-    """Show only the last ``visible`` chars of an opaque secret."""
+    """
+    Show at most the last ``visible`` characters of an opaque secret.
+
+    The mask is a fixed width. It used to be ``"*" * (len(value) - visible)``,
+    which published the secret's exact length in every log line it appeared
+    in -- enough to distinguish a 32-character API key from a 64-character
+    one, and to confirm a guess about which provider issued it.
+    """
     value = str(value)
-    if len(value) <= visible:
+    if len(value) < MIN_MASKABLE_LENGTH:
         return "[REDACTED]"
-    return "*" * (len(value) - visible) + value[-visible:]
+    return "*" * 8 + value[-visible:]
 
 
 def safe_dump(value: Any, *, indent: Optional[int] = 2) -> str:

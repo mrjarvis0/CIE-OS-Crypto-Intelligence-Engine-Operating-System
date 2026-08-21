@@ -33,7 +33,11 @@ from typing import Any, Iterable
 from urllib.parse import urlparse
 
 
-SECRET_NAME_PATTERN = re.compile(r"^[A-Z0-9_][A-Z0-9_./-]{0,127}$")
+#: A secret name is also a filename under ``SecretsConfig.secrets_dir``, so
+#: the separator is excluded: ``A/../../.ENV`` matched the previous pattern
+#: and addressed a file outside the directory. ``.`` stays permitted because
+#: provider names use it, and ``SecretsManager`` rejects ``..`` outright.
+SECRET_NAME_PATTERN = re.compile(r"^[A-Z0-9_][A-Z0-9_.-]{0,127}$")
 ENV_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 HOSTNAME_PATTERN = re.compile(r"^[a-zA-Z0-9.-]+$")
 
@@ -174,8 +178,10 @@ def validate_secret_name(name: Any) -> str:
     if not SECRET_NAME_PATTERN.fullmatch(clean):
         raise ValidationError(
             "secret_name: must match pattern "
-            "^[A-Z0-9_][A-Z0-9_./-]{0,127}$"
+            "^[A-Z0-9_][A-Z0-9_.-]{0,127}$"
         )
+    if ".." in clean:
+        raise ValidationError("secret_name: must not contain '..'")
     return clean
 
 

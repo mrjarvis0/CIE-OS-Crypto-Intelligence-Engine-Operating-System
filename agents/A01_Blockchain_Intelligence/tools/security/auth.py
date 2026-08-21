@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 from ..utils.hashing import constant_time_compare
+from ..utils.helpers import now_utc
 
 __all__ = [
     "AuthenticationError",
@@ -73,10 +74,17 @@ class Token:
 
     @property
     def expired(self) -> bool:
+        """
+        True once ``expires_at`` has passed.
+
+        ``now_utc`` is imported at module scope. It used to be a deferred
+        ``from .utils.helpers import ...`` inside this property, and
+        ``tools.security.utils`` does not exist -- so every credential that
+        carried an expiry raised ``ModuleNotFoundError`` on the one check that
+        was supposed to reject it.
+        """
         if self.expires_at is None:
             return False
-        from .utils.helpers import now_utc
-
         return now_utc().timestamp() > self.expires_at
 
 
@@ -94,23 +102,50 @@ class Authenticator:
 
 
 class TokenAuthenticator(Authenticator):
-    """Validate an opaque bearer token against a static token table."""
+    """
+    Validate an opaque bearer token against a static token table.
 
-    def __init__(self, tokens: Mapping[str, Principal]) -> None:
+    ``expiries`` maps a token value to the epoch second it stops being valid.
+    Without it, :attr:`Token.expired` had nothing to act on: this table held
+    principals only, so an expiring credential was accepted forever.
+    """
+
+    def __init__(
+        self,
+        tokens: Mapping[str, Principal],
+        *,
+        expiries: Optional[Mapping[str, float]] = None,
+    ) -> None:
         self._tokens: Dict[str, Principal] = {}
         for value, principal in tokens.items():
             self._tokens[value] = (
                 principal if isinstance(principal, Principal) else Principal(id=str(principal))
             )
+        self._expiries: Dict[str, float] = dict(expiries or {})
 
     def authenticate(self, credentials: Mapping[str, object]) -> Principal:
-        token = credentials.get("token")
-        if not token:
+        presented = credentials.get("token")
+        if not presented:
             raise AuthenticationError("missing token")
-        stored = self._tokens.get(str(token))
-        if stored is None:
+
+        presented = str(presented)
+
+        # Compared against every entry rather than looked up, so the work done
+        # is the same whether the token is known or not. A dict lookup returns
+        # sooner for an unknown token than for a known one.
+        matched: Optional[str] = None
+        for value in self._tokens:
+            if constant_time_compare(presented, value):
+                matched = value
+
+        if matched is None:
             raise AuthenticationError("unknown token")
-        return stored
+
+        expires_at = self._expiries.get(matched)
+        if expires_at is not None and Token(value=matched, expires_at=expires_at).expired:
+            raise AuthenticationError("expired token")
+
+        return self._tokens[matched]
 
 
 # recursive import would be required for SecretManager typing; the store is

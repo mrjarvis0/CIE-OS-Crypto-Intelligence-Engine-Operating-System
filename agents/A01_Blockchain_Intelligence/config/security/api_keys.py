@@ -20,11 +20,20 @@ Design goals:
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Final, Mapping
 
-from .secrets import SecretValue, SecretsManager, get_default_manager
+#: Imported under an explicit name. This module defines its own
+#: ``get_default_manager`` further down, and the two are different
+#: managers. Sharing the name made ``ApiKeyManager()`` resolve its
+#: secrets backend to *itself* and recurse until the stack ran out.
+from .secrets import (
+    SecretValue,
+    SecretsManager,
+    get_default_manager as get_default_secrets_manager,
+)
 
 
 DEFAULT_API_KEY_PREFIX: Final[str] = "A01_API_KEY_"
@@ -150,7 +159,7 @@ class ApiKeyManager:
         secrets_manager: SecretsManager | None = None,
     ) -> None:
         self._registry = registry or ApiKeyRegistry()
-        self._secrets_manager = secrets_manager or get_default_manager()
+        self._secrets_manager = secrets_manager or get_default_secrets_manager()
 
     @property
     def registry(self) -> ApiKeyRegistry:
@@ -189,7 +198,12 @@ class ApiKeyManager:
         if key.spec.key_type == ApiKeyType.BEARER:
             return {key.spec.header_name: f"Bearer {token}"}
         if key.spec.key_type == ApiKeyType.BASIC:
-            return {key.spec.header_name: f"Basic {token}"}
+            # RFC 7617: the credential is base64("user:pass"). Emitting the
+            # raw token produced a header every server rejects, and the
+            # failure surfaced as a provider auth error rather than as the
+            # encoding mistake it was.
+            encoded = base64.b64encode(token.encode("utf-8")).decode("ascii")
+            return {key.spec.header_name: f"Basic {encoded}"}
         if key.spec.key_type == ApiKeyType.HEADER:
             return {key.spec.header_name: token}
 

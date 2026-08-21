@@ -21,6 +21,7 @@ dormant        Dormant wallet reactivation.
 nft            NFT analysis.
 bridge         Bridge analysis.
 exchange       Directional flow against labelled exchange addresses.
+exploit        Anomalous protocol outflow (DET-EXPLOIT-02).
 governance     Governance analysis.
 transaction    Transaction analysis.
 whale          Whale activity analysis.
@@ -38,6 +39,7 @@ from .contract import ContractAnalyzer
 from .dex import DexAnalyzer
 from .dormant import DormantAnalyzer
 from .exchange import ExchangeFlowAnalyzer
+from .exploit import ExploitAnalyzer
 from .gas import GasAnalyzer
 from .governance import GovernanceAnalyzer
 from .liquidity import LiquidityAnalyzer
@@ -53,6 +55,7 @@ __all__ = [
     "Analyzer",
     "AnalyzerResult",
     "AnomalyAnalyzer",
+    "ExploitAnalyzer",
     "BaseAnalyzer",
     "WalletAnalyzer",
     "TokenAnalyzer",

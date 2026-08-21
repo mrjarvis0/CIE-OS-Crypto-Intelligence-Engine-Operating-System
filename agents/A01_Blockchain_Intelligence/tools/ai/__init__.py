@@ -15,7 +15,11 @@ This package exposes:
 * a shared :class:`AIError` hierarchy (mirroring the adapters layer) so
   provider-specific failures never leak into the Planner;
 * ready-to-use, stdlib-only *local* implementations for every capability so
-  the layer works out of the box and can be swapped for real providers.
+  the layer works out of the box and can be swapped for real providers;
+* real provider clients for every capability (Anthropic, OpenAI and the
+  vendors that speak its wire format, Ollama, Cohere, Voyage, DeepL), a
+  registry that resolves them by name, and :class:`~.providers.ProviderChain`
+  for failover between them.
 
 Two hard rules:
 
@@ -33,6 +37,20 @@ Capabilities (each in its own module):
 * :mod:`~.speech` -- speech-to-text, text-to-speech, VAD.
 * :mod:`~.translation` -- translation, language detection, localization.
 * :mod:`~.moderation` -- toxicity / PII / jailbreak detection and filtering.
+* :mod:`~.providers` -- credentials, HTTP transport, registry, failover.
+
+Choosing a provider is a deployment decision, not a code change::
+
+    from tools import ai
+
+    llm = ai.get_llm()                       # whatever A01_AI_PROVIDER names
+    llm = ai.get_llm("anthropic")            # or one by name
+    llm = ai.get_chain("llm", ["anthropic", "openai", "local"])
+
+The environment variables are the ones ``config.settings.AISettings`` already
+defines -- ``A01_AI_PROVIDER``, ``A01_AI_MODEL_NAME`` -- plus a per-capability
+override (``A01_AI_LLM_PROVIDER``, ``A01_AI_EMBEDDING_MODEL``, ...) and the
+vendor key variables (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ...).
 """
 
 from __future__ import annotations
@@ -43,7 +61,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, Mapping, Optional
+from typing import Any, AsyncIterator, Dict, Mapping, Optional, Sequence
 
 __all__ = [
     "AIError",
@@ -62,33 +80,84 @@ __all__ = [
     "BaseAIModel",
     "normalize_text",
     "ChatMessage",
+    "ImagePart",
     "LLMClient",
     "LLMRequest",
     "LLMResult",
     "LocalLLM",
+    "RemoteLLM",
+    "AnthropicLLM",
+    "OpenAILLM",
+    "OpenAICompatibleLLM",
+    "DeepSeekLLM",
+    "MistralLLM",
+    "GrokLLM",
+    "OllamaLLM",
     "Embedder",
     "EmbeddingResult",
     "LocalEmbedder",
+    "RemoteEmbedder",
+    "OpenAIEmbedder",
+    "VoyageEmbedder",
+    "OllamaEmbedder",
     "Moderator",
     "ModerationRequest",
     "ModerationResult",
     "LocalModeration",
+    "RemoteModeration",
+    "OpenAIModeration",
+    "LLMModeration",
     "Reranker",
     "RerankItem",
     "RerankResult",
     "LocalReranker",
+    "RemoteReranker",
+    "CohereReranker",
+    "LLMReranker",
     "VisionModel",
     "VisionRequest",
     "VisionResult",
     "LocalVision",
+    "LLMVision",
     "SpeechModel",
     "SpeechRequest",
     "SpeechResult",
     "LocalSpeech",
+    "OpenAISpeech",
     "Translator",
     "TranslationRequest",
     "TranslationResult",
     "LocalTranslator",
+    "RemoteTranslator",
+    "DeepLTranslator",
+    "LLMTranslator",
+    # provider plumbing
+    "HTTPTransport",
+    "ProviderChain",
+    "ProviderRegistry",
+    "ProviderSpec",
+    "REGISTRY",
+    "create_provider",
+    "list_providers",
+    "provider_spec",
+    "register_provider",
+    "resolve_api_key",
+    "api_key_env_names",
+    "configured_provider",
+    "configured_model",
+    "estimate_cost",
+    "register_price",
+    # factories
+    "get_model",
+    "get_chain",
+    "get_llm",
+    "get_embedder",
+    "get_reranker",
+    "get_moderator",
+    "get_translator",
+    "get_vision",
+    "get_speech",
+    "provider_catalog",
 ]
 
 logger = logging.getLogger(__name__)
@@ -365,31 +434,68 @@ def normalize_text(value: Any) -> str:
 # stdlib-only and re-exported here as public API.
 # --------------------------------------------------------------------------- #
 
+from .providers import (  # noqa: E402
+    HTTPTransport,
+    ProviderChain,
+    ProviderRegistry,
+    ProviderSpec,
+    REGISTRY,
+    api_key_env_names,
+    configured_model,
+    configured_provider,
+    create_provider,
+    estimate_cost,
+    list_providers,
+    provider_spec,
+    register_price,
+    register_provider,
+    resolve_api_key,
+)
 from .llm import (  # noqa: E402
+    AnthropicLLM,
     ChatMessage,
+    DeepSeekLLM,
+    GrokLLM,
+    ImagePart,
     LLMClient,
     LLMRequest,
     LLMResult,
     LocalLLM,
+    MistralLLM,
+    OllamaLLM,
+    OpenAICompatibleLLM,
+    OpenAILLM,
+    RemoteLLM,
 )
 from .embedding import (  # noqa: E402
     Embedder,
     EmbeddingResult,
     LocalEmbedder,
+    OllamaEmbedder,
+    OpenAIEmbedder,
+    RemoteEmbedder,
+    VoyageEmbedder,
 )
 from .moderation import (  # noqa: E402
+    LLMModeration,
     LocalModeration,
     ModerationRequest,
     ModerationResult,
     Moderator,
+    OpenAIModeration,
+    RemoteModeration,
 )
 from .reranker import (  # noqa: E402
+    CohereReranker,
+    LLMReranker,
     LocalReranker,
+    RemoteReranker,
     RerankItem,
     RerankResult,
     Reranker,
 )
 from .vision import (  # noqa: E402
+    LLMVision,
     LocalVision,
     VisionModel,
     VisionRequest,
@@ -397,13 +503,103 @@ from .vision import (  # noqa: E402
 )
 from .speech import (  # noqa: E402
     LocalSpeech,
+    OpenAISpeech,
     SpeechModel,
     SpeechRequest,
     SpeechResult,
 )
 from .translation import (  # noqa: E402
+    DeepLTranslator,
+    LLMTranslator,
     LocalTranslator,
+    RemoteTranslator,
     TranslationRequest,
     TranslationResult,
     Translator,
 )
+
+
+# --------------------------------------------------------------------------- #
+# Factories
+# --------------------------------------------------------------------------- #
+# The Planner asks for a capability, not for a class. These are the entry
+# points; everything above them is implementation.
+
+
+def get_model(capability: str, provider: Optional[str] = None, **options: Any) -> BaseAIModel:
+    """Build one capability implementation.
+
+    ``provider`` defaults to the configured one for this capability
+    (``A01_AI_<CAPABILITY>_PROVIDER``, then ``A01_AI_PROVIDER``, then
+    ``local``), so a caller that does not care never has to name a vendor.
+    """
+    return create_provider(capability, provider, **options)
+
+
+def get_chain(
+    capability: str,
+    providers: Sequence[str],
+    *,
+    skip_unavailable: bool = True,
+    **options: Any,
+) -> ProviderChain:
+    """Build a failover chain: the first provider that answers wins.
+
+    A provider that cannot even be constructed -- no credential, no model id --
+    is skipped with a warning rather than failing the whole chain, because the
+    chain exists precisely so a deployment missing one key still runs. Set
+    ``skip_unavailable=False`` when a missing key should be loud instead.
+    """
+    models: list[BaseAIModel] = []
+    for name in providers:
+        try:
+            models.append(create_provider(capability, name, **options))
+        except AIError as exc:
+            if not skip_unavailable:
+                raise
+            logger.warning("ai provider %s unavailable for %s: %s", name, capability, exc.message)
+    if not models:
+        raise AIValidationError(
+            f"no usable {capability} provider among: {', '.join(providers) or 'none'}"
+        )
+    return ProviderChain(models, capability=capability)
+
+
+def get_llm(provider: Optional[str] = None, **options: Any) -> LLMClient:
+    """A language model: chat, tools, JSON mode, streaming."""
+    return get_model("llm", provider, **options)
+
+
+def get_embedder(provider: Optional[str] = None, **options: Any) -> Embedder:
+    """An embedding model for memory, RAG and semantic search."""
+    return get_model("embedding", provider, **options)
+
+
+def get_reranker(provider: Optional[str] = None, **options: Any) -> Reranker:
+    """A reranker for retrieval results."""
+    return get_model("reranker", provider, **options)
+
+
+def get_moderator(provider: Optional[str] = None, **options: Any) -> Moderator:
+    """A moderation model for prompt and output safety."""
+    return get_model("moderation", provider, **options)
+
+
+def get_translator(provider: Optional[str] = None, **options: Any) -> Translator:
+    """A translation engine."""
+    return get_model("translation", provider, **options)
+
+
+def get_vision(provider: Optional[str] = None, **options: Any) -> VisionModel:
+    """An image-understanding model."""
+    return get_model("vision", provider, **options)
+
+
+def get_speech(provider: Optional[str] = None, **options: Any) -> SpeechModel:
+    """A speech model: transcription, synthesis, voice activity."""
+    return get_model("speech", provider, **options)
+
+
+def provider_catalog() -> Dict[str, Any]:
+    """Every registered provider, by capability -- for diagnostics and docs."""
+    return REGISTRY.as_dict()

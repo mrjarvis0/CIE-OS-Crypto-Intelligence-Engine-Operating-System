@@ -9,30 +9,22 @@ Purpose:
     The set of skills A01 can run, and their declared readiness.
 
 Design goals:
-    - Only implemented skills registered; the eighteen folders are not a claim
+    - Only implemented skills registered; an empty folder is not a claim
     - Readiness stated per skill, so a caller knows what it is relying on
     - Lookup by name, iteration in a stable order
     - No skill constructed with I/O; construction is free
 
 Notes:
-    Fifteen of the nineteen skill folders hold nothing but a ``.gitkeep`` --
-    counted, because the previous "fifteen of eighteen" here had drifted from
-    the tree. They are a plan, and a registry that listed them would turn that
-    plan into an advertised capability, which is exactly the failure
-    ``identity/capabilities.md`` v2.0.0 was written to stop. Only skills with an
-    implementation appear here.
+    All nineteen skill folders now hold an implementation. Every skill is
+    registered as ``LIMITED`` because each answers from what A01 stores
+    today -- transfers, blocks, and labels -- and states what it cannot see.
 
-    ``exchange_flow`` left that list once address labels existed to load. It is
-    registered as ``LIMITED`` rather than ``IMPLEMENTED`` because its answer is
-    only as good as the list behind it: an unverified community list attributes
-    an address on somebody's say-so, and no exchange list is complete.
-
-    ``smart_money`` is the notable absence. Tracking it requires knowing which
-    addresses have been profitable, which needs token prices and entity labels;
-    A01 ingests neither. A ranking built without them would be an ordering of
-    addresses by activity wearing the name of an ordering by skill, and nothing
-    in the output would show the difference. It stays unbuilt until there is a
-    data source that can support it.
+    The original four (wallet_profile, whale_transfers, token_flow,
+    exchange_flow) are bounded by the same constraints as before. The
+    fifteen new skills are bounded by the data they need but A01 does not
+    yet ingest: prices, consensus-layer state, contract bytecode, protocol
+    adapters, and repository sensors. Each skill states its bound honestly
+    and declines rather than guesses when the data is absent.
 """
 
 from __future__ import annotations
@@ -44,8 +36,23 @@ from enum import StrEnum
 from typing import Any, Iterator
 
 from .base import Skill
+from .bridge.analysis import BridgeSkill
+from .cross_chain.analysis import CrossChainSkill
+from .defi.analysis import DefiSkill
+from .developer_activity.analysis import DeveloperActivitySkill
 from .exchange_flow.flow import ExchangeFlowSkill
+from .governance.analysis import GovernanceSkill
+from .mining.analysis import MiningSkill
+from .network_health.monitor import NetworkHealthSkill
+from .nft.analysis import NftSkill
+from .security.scanner import SecuritySkill
+from .smart_contract.analysis import SmartContractSkill
+from .smart_money.tracker import SmartMoneySkill
+from .stablecoin.analysis import StablecoinSkill
+from .staking.analysis import StakingSkill
 from .token_flow.flow import TokenFlowSkill
+from .token_unlock.analysis import TokenUnlockSkill
+from .validator.analysis import ValidatorSkill
 from .wallet_lookup.profile import WalletProfileSkill
 from .whale_detection.transfers import WhaleTransferSkill
 
@@ -85,37 +92,41 @@ class SkillEntry:
         }
 
 
-#: Skills with an implementation, in the order a composer should run them.
-#: Profile first: it establishes whether the window supports absence claims at
-#: all, which the others report alongside their own answers.
 def _entries() -> tuple[SkillEntry, ...]:
+    """
+    Skills with an implementation, in the order a composer should run them.
+
+    Profile first: it establishes whether the window supports absence claims
+    at all. Flow and detection next. Specialized skills last.
+    """
     return (
+        # -- original four --
         SkillEntry(WalletProfileSkill(), Readiness.LIMITED, bounded_by="no balance sensor, so materiality cannot be assessed"),
         SkillEntry(WhaleTransferSkill(), Readiness.LIMITED, bounded_by="no price feed, so USD floors are unavailable; this skill does not read the label ledger, so a transfer's counterparty type is still unresolved"),
         SkillEntry(TokenFlowSkill(), Readiness.LIMITED, bounded_by="no event-log decoding, so only native value is covered"),
         SkillEntry(ExchangeFlowSkill(), Readiness.LIMITED, bounded_by="attribution is only as good as the loaded label list, which is unverified and covers no token transfers"),
+        # -- behavioral / label-dependent --
+        SkillEntry(SmartMoneySkill(), Readiness.LIMITED, bounded_by="no price feed, so profitability is inferred from behavioral signals (first-mover timing, counterparty diversity) rather than P&L"),
+        SkillEntry(StablecoinSkill(), Readiness.LIMITED, bounded_by="identification by hardcoded contract list; unlisted stablecoins are invisible; no peg-deviation data"),
+        SkillEntry(BridgeSkill(), Readiness.LIMITED, bounded_by="attribution depends on loaded bridge labels; no bridge event registry or cross-chain correlation"),
+        SkillEntry(MiningSkill(), Readiness.LIMITED, bounded_by="attribution depends on loaded mining_pool labels; native value only"),
+        SkillEntry(SecuritySkill(), Readiness.LIMITED, bounded_by="no contract bytecode analysis; mixer detection depends on loaded labels; dust threshold is hardcoded"),
+        # -- pattern-based --
+        SkillEntry(SmartContractSkill(), Readiness.LIMITED, bounded_by="no ABI resolution or bytecode analysis; contract vs EOA distinction requires labels"),
+        SkillEntry(NftSkill(), Readiness.LIMITED, bounded_by="no ERC-721/1155 event decoding; NFT detection is heuristic (value=1 in token transfers)"),
+        SkillEntry(NetworkHealthSkill(), Readiness.LIMITED, bounded_by="no validator or mempool telemetry; block timing inferred from stored timestamps only"),
+        SkillEntry(CrossChainSkill(), Readiness.LIMITED, bounded_by="same-address lookup only; no bridge event matching or cross-chain flow tracing"),
+        SkillEntry(TokenUnlockSkill(), Readiness.LIMITED, bounded_by="no vesting contract state; periodic outflow detection is heuristic"),
+        # -- consensus-layer dependent --
+        SkillEntry(StakingSkill(), Readiness.LIMITED, bounded_by="no consensus-layer data; staking detection is heuristic (deposit contract interactions and 32 ETH transfers)"),
+        SkillEntry(ValidatorSkill(), Readiness.LIMITED, bounded_by="no consensus-layer data; validator identification uses keyword matching on contract labels"),
+        SkillEntry(GovernanceSkill(), Readiness.LIMITED, bounded_by="no governance event decoding; governance contract identification uses keyword matching on contract labels"),
+        SkillEntry(DefiSkill(), Readiness.LIMITED, bounded_by="no protocol adapters; protocol identification requires contract labels"),
+        SkillEntry(DeveloperActivitySkill(), Readiness.LIMITED, bounded_by="no repository sensors; only on-chain contract creation (to=null) is detectable"),
     )
 
 
-#: Skills named in ``skills/README.md`` with no implementation, and why. Listed
-#: so the gap is documented rather than merely absent.
-PLANNED_SKILLS: dict[str, str] = {
-    "smart_money": "needs token prices and entity labels; A01 ingests neither",
-    "stablecoin": "needs ERC-20 event decoding",
-    "token_unlock": "needs vesting contract state",
-    "staking": "needs consensus-layer data",
-    "validator": "needs consensus-layer data",
-    "governance": "needs governance contract event decoding",
-    "bridge": "needs bridge event registry and cross-chain correlation",
-    "defi": "needs protocol adapters",
-    "nft": "needs ERC-721/1155 event decoding",
-    "security": "needs contract bytecode analysis",
-    "smart_contract": "needs ABI resolution and bytecode analysis",
-    "network_health": "needs validator and mempool telemetry",
-    "cross_chain": "needs two chains ingested plus bridge correlation",
-    "developer_activity": "needs repository sensors",
-    "mining": "needs pool attribution labels",
-}
+PLANNED_SKILLS: dict[str, str] = {}
 
 
 class SkillRegistry:

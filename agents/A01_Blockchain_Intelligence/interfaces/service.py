@@ -128,9 +128,15 @@ class IntelligenceService:
             {
                 "detectors": [entry.as_dict() for entry in gate],
                 "alerting": [e.detector for e in gate.alerting_detectors()],
+                # Derived, not written down. The previous wording -- "None
+                # has a measured error rate, so none alerts" -- was true when
+                # it was typed and false from the moment four detectors were
+                # promoted, and an API that states its own state incorrectly
+                # is worse than one that states nothing.
                 "note": (
                     "A detector may raise alerts only at validated maturity. "
-                    "None has a measured error rate, so none alerts."
+                    f"{len(gate.alerting_detectors())} of {len(gate)} may; "
+                    "the rest each name what blocks them."
                 ),
             }
         )

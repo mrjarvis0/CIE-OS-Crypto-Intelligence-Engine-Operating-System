@@ -24,10 +24,18 @@ Notes:
     direction -- an unmeasured error rate "bars it from generating external
     alerts".
 
-    Every detector A01 has today is `Validated`. Each was promoted after
-    ``evaluation/`` backtested it against labelled cases (535 total) and
-    all passed: zero false positives, perfect recall, no overconfidence.
-    They may now emit conclusions at full confidence and raise alerts.
+    Four of the five detectors A01 has today are `Validated`. Each was
+    promoted after ``evaluation/`` backtested it against labelled cases (535
+    total) and all passed: zero false positives, perfect recall, no
+    overconfidence. They may emit conclusions at full confidence and raise
+    alerts.
+
+    The fifth, DET-EXPLOIT-02, is `Implemented`. It is the first detector in
+    the registry to sit below the ceiling since promotion, and it is a useful
+    demonstration that the gate does something: the module is finished, its
+    tests pass, its arithmetic is calibrated against a simulated series -- and
+    none of that is a measured error rate, so it may state conclusions at 0.60
+    and may not alert.
 
     The gate still fails closed. An unrecognised detector is treated as
     `Spec`, which may emit nothing: a typo in a name should silence a
@@ -143,6 +151,23 @@ REGISTRY: Final[tuple[DetectorMaturity, ...]] = (
         detector="DET-EXCHANGE-01",
         analyzer="exchange_flow",
         maturity=Maturity.VALIDATED,
+    ),
+    # Built 2026-08-20 and deliberately not promoted. The arithmetic is
+    # calibrated (see blockchain/security/exploit_detection/outflow.py) but
+    # calibration is not an error rate: no labelled corpus of protocol drains
+    # exists to backtest against, so the rate stays UNMEASURED and the gate
+    # caps it at 0.60 and refuses it an alert. Promoting it on the strength of
+    # a simulation is exactly the move section 7.3 forbids.
+    DetectorMaturity(
+        detector="DET-EXPLOIT-02",
+        analyzer="exploit_outflow",
+        maturity=Maturity.IMPLEMENTED,
+        blocked_by=(
+            "no labelled drain corpus to measure the error rate against; and "
+            "no suppression calendar, so the four benign explanations the "
+            "catalog names (unlocks, migrations, treasury moves, mass "
+            "unstaking) cannot be excluded"
+        ),
     ),
 )
 

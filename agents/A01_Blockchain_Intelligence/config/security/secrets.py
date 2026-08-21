@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from hmac import compare_digest
 import os
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Final, Mapping
 
 
@@ -177,10 +177,65 @@ class SecretsManager:
     def _env_name(self, name: str) -> str:
         return f"{self._config.env_prefix}{self._normalize_name(name)}".upper()
 
+    @staticmethod
+    def _is_single_path_segment(name: str) -> bool:
+        """
+        True when ``name`` can only ever address a direct child of a directory.
+
+        A secret name arrives from a caller, and callers pass names built from
+        config files, CLI arguments and provider identifiers. Any of those can
+        carry a separator. ``Path(secrets_dir) / name`` places no constraint of
+        its own: ``"../../.env"`` walks out of the directory, and an absolute
+        name discards ``secrets_dir`` entirely.
+
+        Both separators are checked on every platform. A POSIX host treats
+        ``"a\b"`` as one filename, so rejecting it there costs nothing, while
+        accepting it on a host that later runs Windows would be a traversal.
+        """
+        if not name or name in {".", ".."}:
+            return False
+        if "/" in name or "\\" in name:
+            return False
+        # A NUL truncates the name at the OS layer, so a guard that ran
+        # before it would be inspecting a different filename than the one
+        # opened.
+        if chr(0) in name:
+            return False
+        # Drive letters and UNC roots: ``C:secret`` is relative to the drive's
+        # own cwd, which is not this directory.
+        if PurePath(name).is_absolute() or PurePath(name).drive:
+            return False
+        return True
+
     def _file_path(self, name: str) -> Path | None:
+        """
+        Path of the file backing ``name``, or None when it cannot be one.
+
+        Returns None rather than raising for a name that is not a single path
+        segment: file resolution is one of three sources, and a name that
+        cannot be a filename simply has no file to read. It may still resolve
+        from the environment or an override.
+        """
         if self._config.secrets_dir is None:
             return None
-        return self._config.secrets_dir / self._normalize_name(name)
+
+        normalized = self._normalize_name(name)
+        if not self._is_single_path_segment(normalized):
+            return None
+
+        root = self._config.secrets_dir
+        candidate = root / normalized
+
+        # Belt and braces: a symlink inside the directory can still point out
+        # of it, and the segment check above cannot see that.
+        try:
+            resolved_root = root.resolve()
+            if not candidate.resolve().is_relative_to(resolved_root):
+                return None
+        except OSError:
+            return None
+
+        return candidate
 
     def _read_secret_file(self, path: Path) -> str | None:
         try:
