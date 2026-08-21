@@ -48,17 +48,31 @@ from .chains import (
     summary,
     token_capable_chains,
 )
+from .stablecoins import (
+    STABLECOINS,
+    Stablecoin,
+    is_stablecoin,
+    lookup,
+    normalize,
+    symbols,
+)
 
 __all__ = [
     "CAPABILITIES",
     "MEASURED_ON",
+    "STABLECOINS",
     "ChainCapability",
     "Finality",
     "ProbeResult",
+    "Stablecoin",
     "capability",
+    "is_stablecoin",
+    "lookup",
+    "normalize",
     "observable_chains",
     "probe",
     "registry_only_chains",
     "summary",
+    "symbols",
     "token_capable_chains",
 ]

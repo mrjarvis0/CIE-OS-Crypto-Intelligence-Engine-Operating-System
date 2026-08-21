@@ -11,7 +11,7 @@
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **1,807 passed**, 1 skipped, **0 failed** |
+| `python -m pytest -q` | **1,827 passed**, 1 skipped, **0 failed** |
 | `python -m cli doctor` | **14/14 `ok`**, schema **v8**, exit 0 |
 | `python -m cli detectors` | **5** detectors, 4 `validated` and alerting, 1 `implemented` and muted |
 | `python -m cli verify detectors` | **4/4 promotable**, zero FPR, perfect recall |
@@ -35,11 +35,33 @@ called twice (a caller connecting the storage and then the repository wrapping
 it hit this) — aiosqlite reported it deleted-before-closed at GC. `connect()` is
 now idempotent. Guarded by `test_storage.py -W error::ResourceWarning`.
 
-**Still open (operator's call):** token/stablecoin attribution. DET-EXPLOIT-02
-stays muted until a labelled drain corpus exists — deliberately, not for lack
-of code: promoting it on synthetic cases would make it fire on legitimate
-unlocks/migrations, so it is held at `implemented` until real announcement data
-and 90 days of reserve history exist.
+**Still open (operator's call):** DET-EXPLOIT-02 stays muted until a labelled
+drain corpus exists — deliberately, not for lack of code: promoting it on
+synthetic cases would make it fire on legitimate unlocks/migrations, so it is
+held at `implemented` until real announcement data and 90 days of reserve
+history exist.
+
+## 2026-08-22 -- stablecoin flow normalised to dollars
+
+Token/stablecoin attribution (decision #2 below) is closed. The rollup still
+reads native value only, but the stablecoin skill now resolves decimals from a
+curated table and reports flow as a summable face-dollar figure — which raw
+base units never could.
+
+- **`knowledge/stablecoins.py`:** curated `(chain, address) -> Stablecoin(symbol,
+  decimals, peg)` for USDC/USDT/DAI/BUSD/USDP across 7 EVM chains. No `eth_call`;
+  decimals fixed at deployment. Keyed by the registry's own slugs — fixing a
+  latent bug where the old symbol list keyed BNB as `bnb` and the decimals
+  resolver keyed it as `bsc`, neither of which a `bnb_chain` lookup ever hit.
+  BNB-chain USDC/USDT are recorded at 18 decimals, not 6.
+- **`skills/stablecoin/analysis.py`:** rewritten to normalise every stablecoin to
+  its face-dollar quantity and sum across them; per-token and net USD figures,
+  sorted by dollar throughput. Bounds state the figure is dollars *at par* —
+  decimals resolved, but no price read, so a de-pegged coin is still counted at $1.
+- **20 tests** (`knowledge/tests/test_stablecoins.py`,
+  `skills/tests/test_stablecoin.py`): registry-slug keys, the BNB 18-decimal
+  guard, decimals agreeing with `contracts.decimals.WELL_KNOWN`, and a USDC+DAI
+  flow summing into one dollar total.
 
 ## 2026-08-21 -- approval-risk wired to stored data
 
@@ -290,9 +312,11 @@ overconfidence. Confidence ceiling lifted from 0.60 to 1.00.
 1. **Whale skill labels.** ✅ **DONE.** `skills/whale_detection/transfers.py`
    reads the label ledger (`LabelRepository`/`LabelSet`); `counterparty_type`
    now answers from a sourced claim, `unlabelled` when the list is empty.
-2. **Token transfer attribution.** ⏳ **STILL OPEN.** Stablecoin flow is
-   unattributed; the rollup (`tiers/hot.py`, `tiers/warm.py`) reads native
-   value only. Borderline vs. the "no new feature" rule — operator's call.
+2. **Token transfer attribution.** ✅ **DONE (2026-08-22).** Stablecoin flow is
+   now normalised to dollars via `knowledge/stablecoins.py` (curated decimals).
+   The rollup (`tiers/hot.py`, `tiers/warm.py`) still reads native value only;
+   attribution lives in the stablecoin skill, which is where a value with a
+   resolved exponent belongs. See "stablecoin flow normalised to dollars" above.
 3. **Exchange flow detector.** ✅ **DONE.** `DET-EXCHANGE-01` (exchange_flow)
    is validated and alerting.
 
