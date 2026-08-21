@@ -43,9 +43,11 @@ from typing import Any
 from ingestion.events import PollResult, PollStatus
 from ingestion.linkage import LinkageError, block_ref_from_record
 from ingestion.queue import RecordQueue
+from normalization.approvals import normalize_approvals
 from normalization.normalizer import NormalizationResult, Normalizer
 from sensors.envelope import RawRecord
 
+from .approvals import SqliteApprovalRepository
 from .repositories import BlockRepository
 from .tokens import SqliteTokenRepository
 
@@ -74,6 +76,11 @@ class WriterStats:
     #: logs can arrive for a block ingestion has not reached, and a persistent
     #: count is the signal that block and log capture have drifted apart.
     orphaned_token_records: int = 0
+    #: Approval grants stored from the same log batches. Zero for a writer with
+    #: no approval repository configured, which is every caller that has not
+    #: opted into approval-risk capture.
+    approvals_written: int = 0
+    orphaned_approvals: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +94,8 @@ class WriterStats:
             "token_transfers_written": self.token_transfers_written,
             "nft_transfers_written": self.nft_transfers_written,
             "orphaned_token_records": self.orphaned_token_records,
+            "approvals_written": self.approvals_written,
+            "orphaned_approvals": self.orphaned_approvals,
         }
 
 
@@ -133,6 +142,7 @@ class RecordWriter:
         *,
         normalizer: Normalizer | None = None,
         tokens: SqliteTokenRepository | None = None,
+        approvals: SqliteApprovalRepository | None = None,
     ) -> None:
         self._repository = repository
         self._normalizer = normalizer if normalizer is not None else Normalizer()
@@ -140,6 +150,11 @@ class RecordWriter:
         # requiring one would make the token schema a dependency of every
         # write path rather than of the token write path.
         self._tokens = tokens
+        # Optional in the same way, and off by default: approval capture is a
+        # screen an operator opts into, not a cost every ingestion run pays.
+        # A writer with no approval repository captures approvals nowhere and
+        # behaves exactly as it did before the schema existed.
+        self._approvals = approvals
         self.stats = WriterStats()
 
     @property
@@ -154,6 +169,10 @@ class RecordWriter:
     def tokens(self) -> SqliteTokenRepository | None:
         return self._tokens
 
+    @property
+    def approvals(self) -> SqliteApprovalRepository | None:
+        return self._approvals
+
     # -- writing ----------------------------------------------------------
 
     def write(self, record: RawRecord) -> NormalizationResult:
@@ -166,6 +185,11 @@ class RecordWriter:
         result = self._normalizer.normalize(record)
 
         if result.is_token_activity:
+            # Approvals ride in the same log batch as transfers. They are
+            # decoded from the raw record here rather than through the token
+            # normalizer, which refuses them as non-transfers on purpose -- an
+            # approval in flow analysis inflates every total it touches.
+            self._write_approvals(record)
             return self._write_tokens(result)
 
         if not result.storable or result.block is None:
@@ -220,6 +244,35 @@ class RecordWriter:
         self.stats.nft_transfers_written += outcome.nfts_written
         self.stats.orphaned_token_records += outcome.orphaned
         return result
+
+    def _write_approvals(self, record: RawRecord) -> None:
+        """
+        Store the approval grants carried in one log batch.
+
+        A no-op unless an approval repository is configured, so a caller that
+        has not opted into approval capture pays nothing and stores nothing.
+        The grants are decoded straight from the raw record: they never entered
+        the token activity, which excludes them by design.
+
+        Failures to file are counted, not raised. An approval whose block is
+        not yet stored is orphaned exactly as a token record is, and the same
+        counter distinguishes a transient ordering gap from a persistent drift
+        between block and log capture.
+        """
+        if self._approvals is None:
+            return
+
+        activity, _issues = normalize_approvals(
+            record.payload,
+            chain=record.chain,
+            source_record_id=record.record_id,
+        )
+        if activity is None or activity.empty:
+            return
+
+        outcome = self._approvals.save(activity)
+        self.stats.approvals_written += outcome.written
+        self.stats.orphaned_approvals += outcome.orphaned
 
     def drain(
         self, queue: RecordQueue[RawRecord], *, batch: int = DEFAULT_BATCH

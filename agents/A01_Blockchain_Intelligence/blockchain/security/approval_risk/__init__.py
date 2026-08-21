@@ -16,28 +16,27 @@ Neither judges a spender. That needs a label source or contract bytecode,
 and A01 ingests neither -- ``exposure.UNANSWERABLE`` carries that limit into
 every report rather than leaving it in a docstring.
 
-Status: complete, and not yet reachable from stored data
--------------------------------------------------------
-The decoding and the replay are finished and tested. What is missing is
-upstream of both: **A01 stores no approval logs.**
+Status: wired to stored data
+----------------------------
+The decoding and the replay were finished and tested before any of this was
+reachable, and they were not changed to make it reachable -- the wiring was
+built around them, not into them. Three pieces close the loop that this
+docstring once named as still open:
 
-``database/migrations.py`` declares ``blocks``, ``transactions``,
-``token_transfers``, ``nft_transfers``, the aggregates, ``entities``,
-``labels``, ``call_ledger`` and ``exchange_flow_hourly``. There is no logs
-table and no approvals table, and ``contracts/events.py`` refuses approval
-logs before they could reach one -- correctly, since an approval moves
-nothing and would corrupt flow totals.
+* ``database/migrations.py`` v8 adds an ``approvals`` table, keyed and
+  cascaded exactly as ``token_transfers`` is, so a replayed block is
+  idempotent and a reorg withdrawal removes a grant with its block.
+* ``normalization/approvals.py`` binds each decoded grant to the block that
+  emitted it, the sibling of the transfer path. ``contracts/events.py`` still
+  refuses approvals as non-transfers -- correctly, since an approval moves
+  nothing -- and this is the separate path that keeps them.
+* ``database/writer.py`` captures approvals from the same log batch through an
+  optional repository, and ``cli approvals`` replays the stored log for one
+  owner into :func:`exposure_for_owner`. The capture is opt-in: a writer with
+  no approval repository behaves exactly as it did before the schema existed.
 
-So this package answers a question about a log stream nobody is capturing.
-That is a deliberate order of work, not an oversight: the decoder has to
-exist before capturing the logs is worth doing, and it is the half that can
-be written and proven without touching the schema. Wiring it to live data
-needs an approvals table, an ingestion path that keeps approval logs instead
-of discarding them, and a migration -- schema work with its own review, and
-the operator's call.
-
-Until then, every entry point here takes its logs from the caller, which is
-also what makes the whole package testable without a database.
+Every entry point here still takes its logs from the caller, which is what
+keeps the decoding and the replay testable without a database.
 """
 
 from .approvals import (

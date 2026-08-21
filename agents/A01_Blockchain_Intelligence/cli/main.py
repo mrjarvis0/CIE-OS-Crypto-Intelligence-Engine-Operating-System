@@ -598,6 +598,83 @@ def _flow_hour_from(entry: dict[str, Any]):
     )
 
 
+def cmd_approvals(args: argparse.Namespace) -> int:
+    """
+    Standing spending grants for one address, and what cannot be said of them.
+
+    Reads the stored approval log for the owner, replays it into the grants
+    still live, and reports their breadth. It never says a spender is
+    dangerous: that needs a label source or contract bytecode, and A01 has
+    neither -- so the report carries its own limits rather than implying an
+    alarm from a list of unlimited grants.
+    """
+    from pathlib import Path
+
+    from blockchain.security.approval_risk import exposure_for_owner
+    from database import Database, SqliteApprovalRepository
+    from schemas.address import Address, AddressError
+
+    db_path = Path(args.db)
+    if not db_path.is_file():
+        print(f"error: database not found: {db_path}", file=sys.stderr)
+        return EXIT_USAGE
+
+    try:
+        owner = Address.parse(args.address, args.chain)
+    except AddressError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    with Database(db_path) as database:
+        grants = SqliteApprovalRepository(database).approvals_for_owner(owner)
+        # as_of is left unset: a log carries no timestamp, so staleness is not
+        # measurable from capture alone, and passing "now" would age every
+        # grant from zero and print a staleness that was never observed.
+        report = exposure_for_owner(grants, owner=owner.value, chain=args.chain)
+
+        if args.format == "json":
+            print(json.dumps(report.as_dict(), indent=2, default=str))
+            return EXIT_OK
+
+        print(f"owner      : {owner.value}")
+        print(f"chain      : {args.chain}")
+        print(
+            f"grants     : {report.total} live, {len(report.unlimited)} unlimited, "
+            f"{len(report.collection_wide)} collection-wide"
+        )
+        print(
+            f"spread     : {len(report.spenders)} spender(s) across "
+            f"{len(report.tokens)} token(s)"
+        )
+        print(
+            f"replayed   : {report.events_replayed} event(s), "
+            f"{report.revoked} revoked"
+        )
+
+        if report.live:
+            print()
+            print(f"{'KIND':<24}{'TOKEN':<14}{'SPENDER':<14}{'BREADTH':>18}")
+            print("-" * 70)
+            for grant in report.live:
+                if grant.unlimited:
+                    breadth = "unlimited"
+                elif grant.allowance is not None:
+                    breadth = str(grant.allowance)
+                else:
+                    breadth = f"token #{grant.token_id}"
+                print(
+                    f"{str(grant.kind):<24}{grant.token[:12]:<14}"
+                    f"{grant.spender[:12]:<14}{breadth[:18]:>18}"
+                )
+
+        # Printed last and never omitted. A screen listing unlimited grants
+        # without these reads as an accusation the data cannot support.
+        print("\nnot determined here:")
+        for note in report.unanswerable:
+            print(f"  - {note}")
+        return EXIT_OK
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     """
     Capture blocks from a chain into the system of record.
@@ -1709,6 +1786,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     flow.set_defaults(func=cmd_flows)
+
+    grants = sub.add_parser(
+        "approvals",
+        help="standing spending grants for one address, and their breadth",
+    )
+    grants.add_argument("--db", required=True, help="database to read")
+    grants.add_argument("--address", required=True, help="owner to screen")
+    grants.add_argument("--chain", default="ethereum", help="chain to read on")
+    grants.set_defaults(func=cmd_approvals)
 
     verify = sub.add_parser(
         "verify",

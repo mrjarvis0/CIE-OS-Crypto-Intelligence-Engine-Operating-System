@@ -11,8 +11,8 @@
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **1,792 passed**, 1 skipped, **0 failed** |
-| `python -m cli doctor` | **14/14 `ok`**, schema **v7**, exit 0 |
+| `python -m pytest -q` | **1,807 passed**, 1 skipped, **0 failed** |
+| `python -m cli doctor` | **14/14 `ok`**, schema **v8**, exit 0 |
 | `python -m cli detectors` | **5** detectors, 4 `validated` and alerting, 1 `implemented` and muted |
 | `python -m cli verify detectors` | **4/4 promotable**, zero FPR, perfect recall |
 | `python -m cli skills` | **19** skills implemented |
@@ -35,9 +35,36 @@ called twice (a caller connecting the storage and then the repository wrapping
 it hit this) — aiosqlite reported it deleted-before-closed at GC. `connect()` is
 now idempotent. Guarded by `test_storage.py -W error::ResourceWarning`.
 
-**Still open (operator's call):** token/stablecoin attribution; approval-risk
-decoder is complete but unwired (needs an approvals table + capture);
-DET-EXPLOIT-02 stays muted until a labelled drain corpus exists.
+**Still open (operator's call):** token/stablecoin attribution. DET-EXPLOIT-02
+stays muted until a labelled drain corpus exists — deliberately, not for lack
+of code: promoting it on synthetic cases would make it fire on legitimate
+unlocks/migrations, so it is held at `implemented` until real announcement data
+and 90 days of reserve history exist.
+
+## 2026-08-21 -- approval-risk wired to stored data
+
+The approval-risk decoder and exposure replay (39 tests, complete since the
+security pass) are now reachable from stored data. Additive only — a new table
+and a new read path, nothing existing changed.
+
+- **migrations v8:** `approvals` table + indexes, keyed on
+  `chain:tx_hash:log_index` and cascaded from `blocks`, so a replayed block is
+  idempotent and a reorg withdrawal removes its grants with it. `CURRENT_VERSION`
+  is derived, so doctor now reports schema v8.
+- **`normalization/approvals.py`:** `normalize_approvals()` binds each decoded
+  grant to its own block hash (sibling of `normalize_logs`). `contracts/events.py`
+  still refuses approvals as non-transfers; this is the separate path that keeps
+  them.
+- **`database/approvals.py`:** `SqliteApprovalRepository` — FK-safe, idempotent
+  writes; `approvals_for_owner()` hydrates back to `DecodedApproval` so the proven
+  replay consumes them unchanged. Canonical reads only.
+- **`database/writer.py`:** optional approval repository, off by default — a
+  writer without one behaves exactly as before. **`cli approvals --db --address`**
+  replays the stored log into `exposure_for_owner` and prints breadth plus the
+  three things it cannot determine.
+- **20 tests** across `database/tests/test_approvals.py` and
+  `cli/tests/test_cli.py`: round-trip into the screen, revocation replay,
+  idempotency, reorg withdrawal, opt-in capture, and the CLI's limits.
 
 ## 2026-08-20 -- security pass
 
@@ -108,7 +135,8 @@ by operator.
 **Complete and not reachable from stored data.** There is no approvals table
 and `contracts/events.py` refuses approval logs as non-transfers, so nothing
 feeds it. The decoder had to exist before capturing the logs was worth doing;
-wiring it needs a migration, which is the operator's call.
+wiring it needs a migration, which is the operator's call. *(Wired 2026-08-21 —
+see "approval-risk wired to stored data" above; schema v8.)*
 
 ### 4. The eight pointer directories now hold code
 

@@ -257,3 +257,41 @@ def test_an_approval_for_an_unstored_block_is_counted_not_inserted(stored):
     assert outcome.written == 0
     assert outcome.orphaned == 1
     assert approvals.count(CHAIN) == 0
+
+
+# ==============================================================================
+# INGESTION WIRING
+# ==============================================================================
+
+def logs_record(*logs) -> RawRecord:
+    return RawRecord(
+        chain=CHAIN,
+        kind=RecordKind.LOGS,
+        height=100,
+        provenance=Provenance("fixture", CHAIN, "eth_getLogs", "ok"),
+        payload=list(logs),
+    )
+
+
+def test_a_writer_with_an_approval_repository_captures_from_the_log_batch():
+    with Database() as db:
+        approvals = SqliteApprovalRepository(db)
+        writer = RecordWriter(SqliteBlockRepository(db), approvals=approvals)
+        writer.write(block_record(100))
+        writer.write(logs_record(erc20_log(index=0), for_all_log(index=1)))
+
+        assert writer.stats.approvals_written == 2
+        grants = approvals.approvals_for_owner(Address.parse(OWNER, CHAIN))
+        report = exposure_for_owner(grants, owner=OWNER, chain=CHAIN)
+        assert report.total == 2
+
+
+def test_a_writer_without_an_approval_repository_stores_no_approvals():
+    """The capture is opt-in: a writer that predates the schema is unchanged."""
+    with Database() as db:
+        writer = RecordWriter(SqliteBlockRepository(db))
+        writer.write(block_record(100))
+        writer.write(logs_record(erc20_log(index=0)))
+
+        assert writer.stats.approvals_written == 0
+        assert SqliteApprovalRepository(db).count(CHAIN) == 0

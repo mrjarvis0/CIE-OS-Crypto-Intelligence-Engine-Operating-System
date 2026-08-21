@@ -325,3 +325,99 @@ class TestCredentials:
         main(["providers"])
 
         assert "sentinel-secret-value" not in capsys.readouterr().out
+
+
+class TestApprovals:
+    """
+    The read path onto stored approval grants. The screen must report breadth
+    without asserting a spender is dangerous -- the one inference the data
+    cannot support -- so its limits are checked as strictly as its figures.
+    """
+
+    OWNER = "0x" + "11" * 20
+    SPENDER = "0x" + "22" * 20
+    TOKEN = "0x" + "44" * 20
+
+    def _seed(self, path):
+        from contracts.signatures import APPROVAL_FOR_ALL_TOPIC, APPROVAL_TOPIC
+        from database import (
+            Database,
+            RecordWriter,
+            SqliteApprovalRepository,
+            SqliteBlockRepository,
+        )
+        from normalization.approvals import normalize_approvals
+        from sensors.envelope import Provenance, RawRecord, RecordKind
+
+        def word(a):
+            return "0x" + a[2:].rjust(64, "0")
+
+        block = RawRecord(
+            chain="ethereum",
+            kind=RecordKind.BLOCK,
+            height=100,
+            provenance=Provenance("fixture", "ethereum", "eth_getBlockByNumber", "ok"),
+            payload={
+                "number": hex(100),
+                "hash": "0xa000100",
+                "parentHash": "0xa000099",
+                "timestamp": hex(1_700_000_000),
+                "transactions": [],
+            },
+        )
+        logs = [
+            {
+                "address": self.TOKEN,
+                "topics": [APPROVAL_TOPIC, word(self.OWNER), word(self.SPENDER)],
+                "data": "0x" + format(2**255, "064x"),  # unlimited
+                "blockNumber": 100,
+                "logIndex": 0,
+                "blockHash": "0xa000100",
+                "transactionHash": "0xt0",
+            },
+            {
+                "address": self.TOKEN,
+                "topics": [APPROVAL_FOR_ALL_TOPIC, word(self.OWNER), word(self.SPENDER)],
+                "data": "0x" + format(1, "064x"),
+                "blockNumber": 100,
+                "logIndex": 1,
+                "blockHash": "0xa000100",
+                "transactionHash": "0xt1",
+            },
+        ]
+        with Database(path) as db:
+            RecordWriter(SqliteBlockRepository(db)).write(block)
+            activity, _ = normalize_approvals(logs, chain="ethereum")
+            SqliteApprovalRepository(db).save(activity)
+
+    def test_a_missing_database_exits_usage(self, capsys, tmp_path) -> None:
+        code = main(["approvals", "--db", str(tmp_path / "none.db"), "--address", self.OWNER])
+        assert code == EXIT_USAGE
+        assert "not found" in capsys.readouterr().err
+
+    def test_the_screen_reports_breadth_and_its_own_limits(self, capsys, tmp_path) -> None:
+        db = tmp_path / "a01.db"
+        self._seed(db)
+
+        code = main(["approvals", "--db", str(db), "--address", self.OWNER])
+        out = capsys.readouterr().out
+
+        assert code == EXIT_OK
+        assert "2 live" in out
+        assert "unlimited" in out
+        # The limits are never omitted: a list of unlimited grants without them
+        # reads as an accusation the data cannot support.
+        assert "not determined here" in out
+        assert "no label source" in out
+
+    def test_json_carries_the_grants_and_the_unanswerable(self, capsys, tmp_path) -> None:
+        db = tmp_path / "a01.db"
+        self._seed(db)
+
+        main(["--format", "json", "approvals", "--db", str(db), "--address", self.OWNER])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["total"] == 2
+        assert payload["unlimited"] == 2
+        assert payload["collection_wide"] == 1
+        assert payload["unanswerable"], "the screen must carry its limits into JSON too"
