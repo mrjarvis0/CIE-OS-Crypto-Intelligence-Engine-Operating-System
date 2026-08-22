@@ -67,12 +67,18 @@ def test_ethereum_usdc_is_six_decimals():
 def test_decimals_agree_with_the_well_known_resolver_where_both_list_it():
     """The curated table and the decimals resolver must not disagree on a coin
     they both know, or a normalised figure depends on which one answered."""
-    # WELL_KNOWN keys BNB Chain as "bsc"; compare only the chains both spell the
-    # same way, which is every chain except BNB.
     for (chain, address), coin in STABLECOINS.items():
         known = WELL_KNOWN.get((chain, address))
         if known is not None:
             assert coin.decimals == known, f"{chain}:{address} disagrees"
+
+
+def test_well_known_resolver_keys_bnb_by_its_registry_slug():
+    """Regression guard: the decimals resolver keyed BNB Chain as `bsc`, so a
+    `bnb_chain` lookup fell through to an eth_call and BNB's 18-decimal USDC/USDT
+    were never answered offline. Both tables must now spell it the same way."""
+    assert WELL_KNOWN.get(("bnb_chain", USDC_BNB)) == 18
+    assert WELL_KNOWN.get(("bsc", USDC_BNB)) is None
 
 
 # ==============================================================================

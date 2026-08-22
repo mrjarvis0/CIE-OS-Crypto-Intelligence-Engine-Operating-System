@@ -112,11 +112,13 @@ WELL_KNOWN: Final[dict[tuple[str, str], int]] = {
     ("polygon", "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"): 6,   # USDC
     ("polygon", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"): 6,   # USDT
     ("polygon", "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"): 18,  # WETH
-    # BSC
-    ("bsc", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"): 18,      # USDC
-    ("bsc", "0x55d398326f99059ff775485246999027b3197955"): 18,      # USDT (BSC)
-    ("bsc", "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"): 18,      # WBNB
-    ("bsc", "0x2170ed0880ac9a755fd29b2688956bd959f933f8"): 18,      # ETH (BSC)
+    # BNB Chain -- keyed by the registry slug `bnb_chain`, not `bsc`: a resolve()
+    # call arrives with ChainName.BNB_CHAIN.value, so a `bsc` key never hit and
+    # every BNB token silently fell through to an eth_call or a failure.
+    ("bnb_chain", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"): 18,  # USDC
+    ("bnb_chain", "0x55d398326f99059ff775485246999027b3197955"): 18,  # USDT
+    ("bnb_chain", "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"): 18,  # WBNB
+    ("bnb_chain", "0x2170ed0880ac9a755fd29b2688956bd959f933f8"): 18,  # ETH (BNB Chain)
 }
 
 

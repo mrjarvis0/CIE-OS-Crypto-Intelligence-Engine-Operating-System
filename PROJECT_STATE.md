@@ -11,7 +11,7 @@
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **1,827 passed**, 1 skipped, **0 failed** |
+| `python -m pytest -q` | **1,828 passed**, 1 skipped, **0 failed** |
 | `python -m cli doctor` | **14/14 `ok`**, schema **v8**, exit 0 |
 | `python -m cli detectors` | **5** detectors, 4 `validated` and alerting, 1 `implemented` and muted |
 | `python -m cli verify detectors` | **4/4 promotable**, zero FPR, perfect recall |
@@ -58,7 +58,11 @@ base units never could.
   its face-dollar quantity and sum across them; per-token and net USD figures,
   sorted by dollar throughput. Bounds state the figure is dollars *at par* —
   decimals resolved, but no price read, so a de-pegged coin is still counted at $1.
-- **20 tests** (`knowledge/tests/test_stablecoins.py`,
+- **`contracts/decimals.py`:** the same slug bug in the general decimals
+  resolver's `WELL_KNOWN` table (BNB keyed as `bsc`) is fixed to `bnb_chain`, so
+  BNB's USDC/USDT/WBNB/ETH now resolve offline instead of falling through to an
+  eth_call. A regression test guards it.
+- **21 tests** (`knowledge/tests/test_stablecoins.py`,
   `skills/tests/test_stablecoin.py`): registry-slug keys, the BNB 18-decimal
   guard, decimals agreeing with `contracts.decimals.WELL_KNOWN`, and a USDC+DAI
   flow summing into one dollar total.
