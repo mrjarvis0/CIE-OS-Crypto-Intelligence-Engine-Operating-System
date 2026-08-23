@@ -1,0 +1,16 @@
+[Unit]
+Description=CIE-OS A01 Blockchain Intelligence API
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cie-os
+ExecStartPre=/usr/bin/docker compose pull a01-api
+ExecStart=/usr/bin/docker compose up a01-api
+ExecStop=/usr/bin/docker compose stop a01-api
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=CIE-OS A01 Blockchain Ingestion (one-shot)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cie-os
+ExecStart=/usr/bin/docker compose run --rm --profile scheduled a01-ingest
+TimeoutStartSec=300

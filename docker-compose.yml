@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  a01-api:
+    build:
+      context: ./agents/A01_Blockchain_Intelligence
+      dockerfile: Dockerfile
+    container_name: cie-os-a01-api
+    ports:
+      - "8801:8801"
+    volumes:
+      - a01-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+    restart: unless-stopped
+
+  a01-ingest:
+    build:
+      context: ./agents/A01_Blockchain_Intelligence
+      dockerfile: Dockerfile
+    container_name: cie-os-a01-ingest
+    volumes:
+      - a01-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+    command: ["ingest", "--db", "/app/data/database/a01.db", "--chain", "ethereum", "--blocks", "50"]
+    restart: "no"
+    profiles:
+      - scheduled
+
+  a02-scan:
+    build:
+      context: .
+      dockerfile: ./agents/A02_News_Intelligence/Dockerfile
+    container_name: cie-os-a02-scan
+    volumes:
+      - a02-data:/app/agents/A02_News_Intelligence/data
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+    command: ["scan"]
+    restart: "no"
+    profiles:
+      - scheduled
+
+volumes:
+  a01-data:
+  a02-data:

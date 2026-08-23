@@ -1,0 +1,10 @@
+[Unit]
+Description=Run CIE-OS A02 news scan every 30 minutes
+
+[Timer]
+OnCalendar=*:5/30
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

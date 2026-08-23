@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: cie-os-a01-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./agents/A01_Blockchain_Intelligence/Dockerfile
+    dockerContext: ./agents/A01_Blockchain_Intelligence
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: A01_AI_PROVIDER
+        value: mock
+      - key: A01_LOG_LEVEL
+        value: INFO
+    healthCheckPath: /health
