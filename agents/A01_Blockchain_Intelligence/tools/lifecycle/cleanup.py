@@ -13,7 +13,7 @@ tool is not currently executing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ..core.exceptions import LifecycleError
 from .state import LifecycleState

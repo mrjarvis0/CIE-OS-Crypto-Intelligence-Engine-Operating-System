@@ -13,10 +13,13 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Optional
 
 from ..utils.cache import TTLCache
 from ..utils.hashing import deterministic_key
+
+if TYPE_CHECKING:
+    from concurrent.futures import Future
 
 __all__ = ["ExecutionCache", "InFlightGuard"]
 
@@ -95,7 +98,7 @@ class InFlightGuard:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._futures: Dict[str, "concurrent_future"] = {}  # type: ignore[name-defined]
+        self._futures: Dict[str, "Future[Any]"] = {}
 
     def guard(self, key: str, fn: Callable[[], Any]) -> Any:
         import concurrent.futures

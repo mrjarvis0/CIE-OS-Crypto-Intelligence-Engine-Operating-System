@@ -11,7 +11,7 @@
 
 | Command | Result |
 |---|---|
-| `python -m pytest -q` | **1,828 passed**, 1 skipped, **0 failed** |
+| `python -m pytest -q` | **1,831 passed**, 1 skipped, **0 failed** |
 | `python -m cli doctor` | **14/14 `ok`**, schema **v8**, exit 0 |
 | `python -m cli detectors` | **5** detectors, 4 `validated` and alerting, 1 `implemented` and muted |
 | `python -m cli verify detectors` | **4/4 promotable**, zero FPR, perfect recall |
@@ -40,6 +40,32 @@ drain corpus exists — deliberately, not for lack of code: promoting it on
 synthetic cases would make it fire on legitimate unlocks/migrations, so it is
 held at `implemented` until real announcement data and 90 days of reserve
 history exist.
+
+## 2026-08-22 -- pyflakes bug sweep (3 latent NameErrors fixed)
+
+A `pyflakes` pass over the whole agent surfaced eight undefined-name hits.
+Three were genuine `NameError` crashes waiting in code paths the collected
+suite never drove -- which is why a green run hid them. All three fixed, each
+guarded by a new regression test named for the defect. Suite 1,828 -> **1,831**.
+
+| File | Bug | Fix |
+|---|---|---|
+| `memory/base/conversation.py:1871` | `health_check()` aggregated with a bare `_is_healthy(...)`; it is a method, so `overall_status` raised `NameError` every call | `self._is_healthy(...)` |
+| `memory/base/vector_memory.py:1717` | `_row_to_entry()` fell to a bare `uuid4()` (only `uuid` is imported) when a row's id was empty | `uuid.uuid4()` |
+| `tools/adapters/subprocess.py:241` | `stream()` caught `except AdapterError` but imported only the subclasses; any spawn failure raised `NameError` in the except clause, masking the real error | import `AdapterError` |
+
+Two more were type-only latent defects (string annotations, no runtime crash),
+also fixed: `tools/lifecycle/cleanup.py` used `Sequence` unimported; `tools/core/cache.py`
+annotated `_futures` as the non-existent `"concurrent_future"` (now `"Future[Any]"`
+under `TYPE_CHECKING`). The remaining pyflakes undefined-name hit --
+`tools/adapters/rest.py:134` `"ssl.SSLContext"` -- is a **false positive**: a
+string return annotation, never evaluated, with `ssl` imported locally inside
+the method body by design.
+
+New tests: `memory/base/tests/test_base_regressions.py` (2),
+`tools/tests/test_subprocess_stream.py` (1). `memory/base/` had no
+pytest-collected coverage before this, which is the coverage gap that let the
+first two bugs ship.
 
 ## 2026-08-22 -- stablecoin flow normalised to dollars
 

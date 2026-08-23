@@ -29,6 +29,7 @@ from typing import Any, Dict, Iterable, Optional
 
 from . import (
     AdapterConnectionError,
+    AdapterError,
     AdapterExecutionError,
     AdapterRequest,
     AdapterResponse,

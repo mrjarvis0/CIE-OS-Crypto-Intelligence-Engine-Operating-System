@@ -1868,7 +1868,7 @@ class ConversationMemory(BaseMemory[Message]):
             "cache_status": await self._check_cache(),
         }
 
-        checks["overall_status"] = all(_is_healthy(checks[k]) for k in checks if k != "overall_status")
+        checks["overall_status"] = all(self._is_healthy(checks[k]) for k in checks if k != "overall_status")
         return checks
 
     async def _check_database(self) -> bool:

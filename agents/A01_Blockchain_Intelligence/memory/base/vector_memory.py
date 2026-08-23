@@ -1714,7 +1714,7 @@ class VectorMemory(BaseMemory[Any]):
             key=row[1],
             value=value,
             metadata=metadata,
-            identifier=uuid.UUID(row[0]) if len(row) > 0 and row[0] else uuid4(),
+            identifier=uuid.UUID(row[0]) if len(row) > 0 and row[0] else uuid.uuid4(),
         )
 
     async def _touch(self, key: str, namespace: str, collection: str) -> None:
